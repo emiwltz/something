@@ -60,6 +60,15 @@ import SomethingCore
     @ObservationIgnored var building: (String) -> Bool = { _ in false }
     /// Told where an export was written and whether it holds the memory: the window's toast, with Show.
     @ObservationIgnored var exported: (URL, Bool) -> Void = { _, _ in }
+    /// Told the title of a space imported: the window's toast.
+    @ObservationIgnored var imported: (String) -> Void = { _ in }
+    /// The agents of this Mac a page could reach, for the sentence at Import: no assistant among them.
+    @ObservationIgnored var seen: () -> [Agent] = { [] }
+    /// The check of an import, whose output folder holds its stage too, so that the page's copy goes where a check's
+    /// files go; a test gives its own.
+    @ObservationIgnored var checker: @MainActor (Places, URL) -> CheckRunner = { CheckRunner(places: $0, share: $1) }
+    /// The last import under way: they come one at a time, each with its sheets.
+    @ObservationIgnored var arriving: Task<Void, Never>?
     /// Show in Finder; a test puts its own, so that Finder never opens.
     @ObservationIgnored var reveal: (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) }
     /// Moves a file to the Trash and returns where it went; a test moves it into its own home, so that nothing reaches
@@ -297,14 +306,18 @@ import SomethingCore
         if let memory = trashed.memory, (try? manager.moveItem(at: memory.trash, to: memory.home)) == nil {
             words += " · its memory stays in the Trash"
         }
-        relist()
-        fresh = trashed.name
-        select(.space(trashed.name))
-        // The ring's own time, as an arrival lets it go.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
-            if self?.fresh == trashed.name { self?.fresh = nil }
-        }
+        ring(trashed.name)
         return (true, words)
+    }
+
+    /// Lists again and opens `name`, which just came in, its row ringed for the ring's own time, as an arrival lets it go.
+    func ring(_ name: String) {
+        relist()
+        fresh = name
+        select(.space(name))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
+            if self?.fresh == name { self?.fresh = nil }
+        }
     }
 
     /// The Undo of `trashed` is over: its answers, group and versions go, as its conversation does. Says what failed.
@@ -358,7 +371,7 @@ import SomethingCore
 
     /// The paths of the links in a folder space, sorted: what its export leaves out. A file space has none here (a
     /// linked one is refused whole). Hidden paths are not part of the space and are not listed.
-    private static func links(_ space: Space) -> [String] {
+    static func links(_ space: Space) -> [String] {
         guard space.form == .folder else { return [] }
         let paths = FileManager.default.enumerator(atPath: space.location.path)?.allObjects as? [String] ?? []
         return paths.filter { !$0.split(separator: "/").contains { $0.hasPrefix(".") } && Versions.isLink(space.location.appendingPathComponent($0)) }.sorted()
@@ -403,31 +416,6 @@ import SomethingCore
             DispatchQueue.main.async { [weak self] in self?.using = false }
         } catch {
             ask.tell("“\(template.title)” was not made. \(error.sentence)")
-        }
-    }
-
-    /// Asks for an exported file and imports it.
-    func importChosen() {
-        if let url = ask.importFile() { importSpace(from: url) }
-    }
-
-    /// Reads the exported file at `url`, one HTML file or an older .something, and makes it a new space, then opens it. It has no grant: what the grants
-    /// file kept for the name it gets is dropped before anything is written, so a grants file that cannot be changed
-    /// leaves no space, and the space asks for its rights at its first opening.
-    func importSpace(from url: URL) {
-        do {
-            // Mapped, not loaded: a huge file is refused by Export.read for its size without being read.
-            let file = try Data(contentsOf: url, options: .alwaysMapped)
-            let received = try Export.read(Export.unwrap(file) ?? file)
-            let folder = Spaces(root: places.spaces)
-            let name = try Export.freeName(received, in: folder, memory: places.data)
-            try Library.forget(name, in: places, recycle: recycle)
-            try FileManager.default.createDirectory(at: places.spaces, withIntermediateDirectories: true)
-            let space = try Export.place(received, as: name, in: folder, memory: places.data)
-            relist()
-            select(.space(space.name))
-        } catch {
-            ask.tell("\(url.lastPathComponent) was not imported. \(error.sentence)")
         }
     }
 }

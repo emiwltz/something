@@ -1582,8 +1582,125 @@ struct AcceptanceShell {
         await AcceptanceBuild.finish(model)
     }
     @Test("f3-3: Halo, rise, fade", .disabled("not built yet: S10")) func f3_3() async throws {}
-    @Test("f6-2: Import, checked first", .disabled("not built yet: C9")) func f6_2() async throws {}
-    @Test("f6-2b: A file dropped on the window", .disabled("not built yet: C9")) func f6_2b() async throws {}
+    @Test("f6-2: Import, checked first") func f6_2() async throws {
+        let stage = try Stage("shell-f6-2")
+        defer { stage.remove() }
+        let (shell, library, _, view) = try await AcceptanceShell.weekend(stage)
+        defer { view.close() }
+        let runner = try CheckTests.runner(stage.home)
+        library.checker = { _, _ in runner }
+        library.preferences.motion = .reduced
+        let ask = try #require(library.ask as? FakeAsk), downloads = stage.home.places.downloads
+        try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+        let body = #"{"contract": 1, "title": "Garden plan", "rights": ["state"]}"#
+        let file = downloads.appendingPathComponent("garden-plan.html"), original = page(body, "<h1>Garden plan</h1><p>Invented.</p>")
+        try original.write(to: file, atomically: true, encoding: .utf8)
+        #expect(Keys.command("import")?.title == "Import Space…")
+
+        // Checked first: nothing comes in, then the sheet says what was found, the sentence at None.
+        let waiting = Ask.checking("garden-plan.html")
+        #expect(waiting.title == "Checking garden-plan.html…" && waiting.buttons.map(\.title) == ["Cancel"])
+        #expect(PanelsTests.texts(waiting.contentView).contains("In a view locked off the network. Nothing opens yet."))
+        let before = library.entries.count
+        var level = Grant.Level.watch
+        ask.imports = { _ in
+            #expect(library.entries.count == before, "imported before the check")
+            return LevelChoice(level: level)
+        }
+        ask.chosen = file
+        library.importChosen()
+        await library.arriving?.value
+        #expect(ask.told.isEmpty, "\(ask.told)")
+        #expect(ask.checked == ["garden-plan.html"])
+        // Then it is in the list, opened, its row ringed, at the sentence's level; the original has not moved.
+        #expect(library.entry("garden-plan")?.title == "Garden plan" && library.selection == .space("garden-plan") && library.fresh == "garden-plan")
+        #expect(try AppFile.read(stage.home.places.grants).spaces["garden-plan"]?.level == .watch)
+        #expect(try String(contentsOf: file, encoding: .utf8) == original)
+        #expect(shell.layer.subviews.compactMap { $0 as? Toast }.last?.words == "Garden plan is in your spaces")
+        let found = try #require(ask.found.first)
+        let sheet = Ask.found(found), texts = PanelsTests.texts(sheet.sheet.contentView)
+        #expect(sheet.sheet.title == "Garden plan is ready to import" && sheet.sheet.buttons.map(\.title) == ["Cancel", "Import"], "\(texts)")
+        for words in ["No errors", "0 warnings", "It stays off the network", "nothing to block", "No memory yet", "It asks to watch your agents",
+                      "It comes in as a copy. The original file doesn’t change."] {
+            #expect(texts.contains(words), "\(words): \(texts)")
+        }
+        #expect(texts.contains { $0.hasPrefix("garden-plan.html · ") && $0.hasSuffix(" · checked, locked off the network") }, "\(texts)")
+        #expect(sheet.answer().level == Grant.Level.none, "the sentence starts at None")
+        #expect(sheet.sheet.firstResponder === sheet.sheet.buttons[1], "Return imports")
+        try await stage.appearances { suffix in
+            try await Picture.sheet(Ask.checking("garden-plan.html"), over: shell, library: library, web: view.web, "f6-2b-checking" + suffix, root: stage.home.root)
+            try await Picture.sheet(Ask.found(found).sheet, over: shell, library: library, web: view.web, "f6-2" + suffix, root: stage.home.root)
+        }
+        // A page that wants the Internet: one problem, the address it tried, and the fine print that says what to do.
+        let dashboard = downloads.appendingPathComponent("old-dashboard.html")
+        try page(#"{"contract": 1, "title": "Old dashboard"}"#, #"<img src="https://cdn.example.com/chart.png">"#).write(to: dashboard, atomically: true, encoding: .utf8)
+        // A .something, with its memory.
+        let notes = try stage.home.space("morning-notes", page(#"{"contract": 1, "title": "Morning notes"}"#, "<p>Invented.</p>"))
+        let older = downloads.appendingPathComponent("morning-notes.something")
+        try Export.document(notes, data: ["one": 1, "two": 2], app: "test").write(to: older)
+        try FileManager.default.removeItem(at: notes.location)
+        library.relist()
+        level = .none
+        ask.imports = { _ in nil }
+        library.importing([dashboard, older])
+        await library.arriving?.value
+        #expect(ask.checked.suffix(2) == ["old-dashboard.html", "morning-notes.something"] && ask.told.isEmpty, "\(ask.told)")
+        let problem = Ask.found(ask.found[1]), export = Ask.found(ask.found[2])
+        #expect(problem.sheet.title == "Old dashboard has 1 problem")
+        #expect(PanelsTests.texts(problem.sheet.contentView).contains("cdn.example.com is blocked"), "\(PanelsTests.texts(problem.sheet.contentView))")
+        #expect(PanelsTests.texts(problem.sheet.contentView).contains("Something it loads comes from the Internet, so it stays empty."))
+        #expect(PanelsTests.texts(problem.sheet.contentView).contains("You can import it and ask its assistant to fix this. The original file doesn’t change."))
+        #expect(PanelsTests.texts(export.sheet.contentView).contains("An export from something") && PanelsTests.texts(export.sheet.contentView).contains("2 entries"))
+        try await stage.appearances { suffix in
+            try await Picture.sheet(problem.sheet, over: shell, library: library, web: view.web, "f6-2-problem" + suffix, root: stage.home.root)
+            try await Picture.sheet(export.sheet, over: shell, library: library, web: view.web, "f6-2-export" + suffix, root: stage.home.root)
+        }
+        #expect(library.entry("old-dashboard") == nil && library.entry("morning-notes") == nil, "Cancel brings nothing in")
+    }
+
+    @Test("f6-2b: A file dropped on the window") func f6_2b() async throws {
+        let stage = try Stage("shell-f6-2b")
+        defer { stage.remove() }
+        let (shell, library, _, view) = try await AcceptanceShell.weekend(stage)
+        defer { view.close() }
+        let runner = try CheckTests.runner(stage.home)
+        library.checker = { _, _ in runner }
+        library.preferences.motion = .reduced
+        let ask = try #require(library.ask as? FakeAsk), downloads = stage.home.places.downloads
+        try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+        let file = downloads.appendingPathComponent("garden-plan.html"), text = downloads.appendingPathComponent("notes.txt")
+        try page(nil, "<p>Invented.</p>").write(to: file, atomically: true, encoding: .utf8)
+        try "Invented.".write(to: text, atomically: true, encoding: .utf8)
+        func veil() -> DropVeil? { shell.layer.subviews.compactMap { $0 as? DropVeil }.first }
+
+        // An .html over the page: the veil, and WebKit never hears of it.
+        let drag = FakeDrag([file], in: shell.window)
+        #expect(view.web.drops === shell.drops && view.web.draggingEntered(drag) == .copy)
+        let shown = try #require(veil())
+        #expect(PanelsTests.texts(shown) == ["Drop to Import", "It’s checked before it opens."], "\(PanelsTests.texts(shown))")
+        #expect(shown.hitTest(NSPoint(x: 20, y: 20)) == nil && !shell.layer.isHidden)
+        #expect(shown.frame == shell.layer.bounds.insetBy(dx: 10, dy: 10))
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: view.web, "f6-2b" + suffix, root: stage.home.root)
+        }
+        view.web.draggingExited(drag)
+        #expect(veil() == nil, "left the window")
+        #expect(view.web.draggingEntered(drag) == .copy && view.web.prepareForDragOperation(drag) && view.web.performDragOperation(drag))
+        #expect(veil() == nil)
+        await library.arriving?.value
+        #expect(ask.checked == ["garden-plan.html"] && library.entry("garden-plan") != nil, "\(ask.told)")
+
+        // Another file over the page is the page's: no veil, and no import.
+        _ = view.web.draggingEntered(FakeDrag([text], in: shell.window))
+        #expect(veil() == nil)
+        // Where no page is, it gets one sentence.
+        #expect(shell.center.draggingEntered(FakeDrag([text])) == .copy && veil() != nil)
+        #expect(shell.center.performDragOperation(FakeDrag([text])) && veil() == nil)
+        await library.arriving?.value
+        #expect(ask.told.last == "something can’t import notes.txt. It takes a folder, an .html file or a .something file.", "\(ask.told)")
+    }
+
+    @Test("f6-3: The white tile", .disabled("not built yet: S10")) func f6_3() async throws {}
     /// F6.3: packaging/something.icns holds every size of a white tile on Apple's grid, the sign on it, and nothing
     /// around it. Day and night it is the same picture. Its place in the Dock is seen by hand only.
     @Test("f6-3: The white tile") func f6_3() async throws {

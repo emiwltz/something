@@ -75,6 +75,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         library.opened = { [weak self] name in self?.open(name) }
         library.trashing = { [weak self] entry in self?.confirmTrash(entry) }
         library.used = { [weak self] name in self?.assistant.fromTemplate = name }
+        library.seen = { [weak self] in self.map { app in app.engine.state.agents.filter { !app.engine.assistants.contains($0.id) } } ?? [] }
         library.building = { [weak self] name in self?.assistant.build(writing: name) != nil }
         info.current = { [weak self] in self?.current }
         // The space stays selected, so that it opens again with the window.
@@ -165,15 +166,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         if handed != nil { handed?.append(contentsOf: urls) } else { urls.forEach(receive) }
     }
 
-    /// Imports an export, or opens a space of the spaces folder; says how to open any other page.
+    /// Opens a space of the spaces folder; anything else is an import, checked first.
     func receive(_ url: URL) {
-        if url.pathExtension == "something" {
-            shell.front()
-            return library.importSpace(from: url)
-        }
         guard let space = Command.kept(url, places) else {
             shell.front()
-            return ask.tell(Command.elsewhere(url))
+            return library.importing([url])
         }
         library.relist()
         library.select(.space(space.name))

@@ -466,9 +466,11 @@ await something.store.set("seen", [...seen, "a1"]);
   declares; a something that does not know that contract refuses to import it. It never carries the rights they gave,
   the journal, or anything read from an agent, and a file of your space that is a link to somewhere else is left out.
   Keep a space under about 15 MB of files (the export must stay under 20 MB) and 500 files, and give no file a name
-  starting with ".", or it cannot be exported and imported whole. Import takes that file back whole, or an older
-  `.something` file (JSON: its files in base64). On another Mac, the space asks for its level again and fills with that
-  Mac's agents.
+  starting with ".", or it cannot be exported and imported whole. Import takes that file back whole, or any .html file, a
+  folder, or an older `.something` file (JSON: its files in base64). On another Mac, the space asks for its level again
+  and fills with that Mac's agents. When every file dropped on your page is an .html file, a `.something` file or a
+  folder, it is an import, the app's, and your page hears nothing of it. Any other drag, a mix included, reaches your
+  page's own drop zones.
 - **The sidebar.** It may come over the left of your space, 250 points wide, and your page gets no `resize`; kept open, it narrows your space as the panel does.
 - **The assistant.** Your space's own assistant rests over it as a 44-point sticker, 16 points from its bottom right
   corner, and opens there into a card 412 points wide. The person may drag the sticker; it settles against the

@@ -11,7 +11,7 @@ final class Sheet: NSPanel {
     enum Role { case cancel, secondary, primary, destructive }
     /// An action; `hint` is the key that presses it, shown after its title.
     struct Action { var title: String, role: Role, hint: String? = nil }
-    enum Icon { case symbol(String), sign }
+    enum Icon { case symbol(String), sign, eyes(Sign.State) }
     /// A sentence in parts, each bold or not: the words a space chose are never read as markup.
     typealias Words = [(text: String, bold: Bool)]
     /// A row of what a sheet is about: a symbol or an agent's eyes, a label on one line, and a detail at the right, in
@@ -30,8 +30,8 @@ final class Sheet: NSPanel {
     var ended: () -> Void = {}
 
     /// A sheet of the parts given, in this order, `width` points wide; `alert` centres them. Text the page gave is
-    /// shown as is.
-    init(icon: Icon?, title: String, body: Words = [], rows: [Row] = [], block: NSView? = nil, fine: String? = nil,
+    /// shown as is. `lead` is a line the plain words of `body` cannot set.
+    init(icon: Icon?, title: String, body: Words = [], lead: NSView? = nil, rows: [Row] = [], block: NSView? = nil, fine: String? = nil,
          actions: [Action], alert: Bool = false, width: CGFloat = Sheet.width) {
         isAlert = alert
         super.init(contentRect: NSRect(x: 0, y: 0, width: width, height: 100), styleMask: .borderless, backing: .buffered, defer: true)
@@ -42,6 +42,7 @@ final class Sheet: NSPanel {
         heading.preferredMaxLayoutWidth = Self.balanced(heading, width: text)
         var parts: [NSView] = [heading]
         if !body.isEmpty { parts.append(Self.label(body, Look.body, color: .ink2, width: text, centred: alert)) }
+        if let lead { parts.append(lead) }
         if !rows.isEmpty { parts.append(Self.list(rows, width: text)) }
         // A block of its own is as wide as the text, so that what it holds can wrap there.
         block?.widthAnchor.constraint(equalToConstant: text).isActive = true
@@ -153,6 +154,12 @@ final class Sheet: NSPanel {
             // The mockup's 30-point sign draws its corners about 22 points wide, which a 25-point image of ours does, in
             // the same 44-point tile.
             return Sign.tile(side: 25, radius: 11, inset: 9.5)
+        case .eyes(let state):
+            let image = NSImageView(image: Sign.miniEyes(state))
+            (image.contentTintColor, image.imageScaling) = (Look.Token.eyes.color, .scaleNone)
+            let tile = Box(image, fill: .sunk, ring: .line, radius: Look.control, insets: NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8))
+            NSLayoutConstraint.activate([image.widthAnchor.constraint(equalToConstant: 16), image.heightAnchor.constraint(equalToConstant: 16)])
+            return tile
         }
     }
 
@@ -178,7 +185,7 @@ final class Sheet: NSPanel {
             let image: NSImageView
             switch row.mark {
             case .symbol(let name):
-                image = NSImageView.symbol(name, 11, .regular, tint: .ink3)
+                image = NSImageView.symbol(name, 11, .regular, tint: row.bad ? .bad : .ink3)
                 image.widthAnchor.constraint(equalToConstant: 14).isActive = true
             case .eyes(let state):
                 image = NSImageView(image: Sign.miniEyes(state))
@@ -190,6 +197,7 @@ final class Sheet: NSPanel {
             let label = label(row.label, Look.Style(face: Look.medium.face, size: Look.medium.size, weight: Look.medium.weight, leading: 1),
                               width: width - 80)
             (label.maximumNumberOfLines, label.lineBreakMode) = (1, .byTruncatingTail)
+            (label.cell as? NSTextFieldCell)?.truncatesLastVisibleLine = true
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             let style = row.plain ? Look.small : Look.Style(face: .code, size: 11, weight: .regular, leading: 1)
             let meta = row.meta.map { RequestPanel.text($0, style, row.bad ? .bad : .ink3) }

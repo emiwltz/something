@@ -20,7 +20,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     let window: NSWindow
     let split = NSSplitViewController()
     /// The center: one of its three states at a time.
-    let center = NSView()
+    let center = DropCenter()
+    /// What a file dragged over the window does (Import.swift).
+    let drops = Drops()
     /// The docked panel at the right edge, its tabs Agents, Info and History (Inspector.swift), collapsed at first.
     let inspector: NSSplitViewItem
     let info: Info
@@ -142,6 +144,10 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         library.renamed = { [weak self] name in if let space = self?.space, space.space.name == name { self?.heading(space) } }
         library.told = { [weak self] words in self?.toast(words, quiet: true) }
         assistant.noted = { [weak self] words in self?.toast(words, quiet: true) }
+        center.drops = drops
+        drops.veiled = { [weak self] on in if let self { DropVeil.set(on, in: self.layer) } }
+        drops.dropped = { [weak library] in library?.importing($0) }
+        library.imported = { [weak self] title in _ = self?.toast("\(title) is in your spaces") }
         library.exported = { [weak self, weak library] url, memory in
             let words = "\(url.lastPathComponent) is in Downloads · one HTML file\(memory ? ", its memory inside" : "")"
             _ = self?.toast(words, action: Toast.Action(label: "Show") { library?.reveal(url) }, seconds: 6)
@@ -416,6 +422,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         if Popover.shown?.window === window { Popover.shown?.close() }
         library.previewing = false
         self.space = space
+        space?.web.drops = drops
         // Off the spaces, the page's full screen ends.
         let inside = drawer.inside, writing = space.map { assistant.build(writing: $0.space.name) != nil } ?? false
         drawer.change { $0.viewed(page: space != nil, inside: inside, writing: writing) }

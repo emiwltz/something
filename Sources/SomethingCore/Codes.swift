@@ -66,7 +66,7 @@ public enum Codes {
         "TOO_HEAVY": Code("check", .warning, "The space weighs more than 5 MB.", "Remove files the space does not use, or make its images smaller."),
         "UNKNOWN_KEY": Code("check", .info, "A declaration key this engine does not know; ignored.", "Remove the key, or check its spelling."),
 
-        "IMPORT_NOT_A_SPACE": Code("import", .error, "The file is not a .something export.", "Import a file made by something's export."),
+        "IMPORT_NOT_A_SPACE": Code("import", .error, "The file is not an export of something, in HTML or as a .something file.", "Import a file made by something's export."),
         "IMPORT_TOO_NEW": Code("import", .error, "The export carries a contract higher than this engine knows.", "Update something, then import again."),
         "IMPORT_UNSAFE_PATH": Code("import", .error, "A file path is absolute, has .., or an empty or hidden segment.", "Export the space again from something; this file was changed by hand."),
         "IMPORT_TOO_BIG": Code("import", .error, "Over 20 MB or 500 files.", "Remove files the space does not use, then export it again."),

@@ -187,7 +187,9 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   menus, on its row and in Info) writes the space as one HTML file in your Downloads folder, without its level or its
   journal. A space with a memory first asks, Include Its Memory, unticked unless Settings › Spaces › Include a space's
   memory when you export it is on, and keeps your choice for that space; a space without one exports in one click.
-  Opened in a browser, the file shows its page, and what needs something, such as your agents, says so.
+  Opened in a browser, the file shows its page, and what needs something, such as your agents, says so. Import Space…
+  takes that file, a folder, an .html file or an older `.something` file: something checks it first, locked off the
+  network, says what it found, and brings it in as a copy.
 
 something reads each agent's own files read-only, and takes only what a space is shown. It writes nothing into your
 agents' configuration: no hook, no MCP server, no skill, no setting. What a launch needs is passed on the command line
@@ -257,8 +259,8 @@ installed on macOS 26 and 15 (Apple silicon) and macOS 15 on Intel; the suite it
 ## Security
 
 The agents run as you, with your own settings, in the folder you chose: give something the trust you give them. A
-space is code your agent wrote: read what you open. To report a weakness privately, use "Report a vulnerability" in
-the Security tab of the repository.
+space is code your agent wrote: read what you open. A page you import starts with no right, until you choose. To report
+a weakness privately, use "Report a vulnerability" in the Security tab of the repository.
 
 ## License
 

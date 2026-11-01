@@ -16,7 +16,7 @@ enum Command: Equatable {
         """
         Usage:
           something                       start something, or bring it to the front
-          something open <name>           open a space of ~/something/spaces; or import an export (a .something file)
+          something open <name>           open a space of ~/something/spaces; or import a folder, an .html or a .something file
           something new <name> [--folder] make a space from the template (a folder holds more than one file)
           something new <name> --from <t> make a space from a template: \(Template.present(share).joined(separator: ", "))
           something guide [--print]       where the guide for the coding agent that writes your spaces is
@@ -69,12 +69,13 @@ enum Command: Equatable {
         }
     }
 
-    /// What to say when `name` is the path of an export (a .something file) that is not there; nil otherwise. Checked
-    /// before any app starts, inside the .app (here) and under `swift run` (main.swift) alike.
-    static func missingExport(_ name: String) -> String? {
-        guard (name as NSString).pathExtension == "something",
-              !FileManager.default.fileExists(atPath: URL(fileURLWithPath: name).standardizedFileURL.path) else { return nil }
-        return "There is no file at \(name): give the path of an export, a .something file."
+    /// What to say when `name`, a path, cannot be imported: it is not there, or not something it takes; nil otherwise,
+    /// and for a space's name. Checked before any app starts, inside the .app (here) and under `swift run` (main.swift) alike.
+    static func refused(_ name: String) -> String? {
+        guard !Spaces.isName(name) else { return nil }
+        let url = URL(fileURLWithPath: name).standardizedFileURL
+        guard FileManager.default.fileExists(atPath: url.path) else { return "There is no file at \(name): give the path of a folder, an .html file or a .something file." }
+        return Import.takes(url) ? nil : "something can’t import \(url.lastPathComponent). \(Import.kinds)"
     }
 
     /// Does what was asked and returns the exit status. `door` reaches the app; `say` prints to the terminal, on
@@ -83,20 +84,15 @@ enum Command: Equatable {
         switch self {
         case .start:
             return door.start().map { say($0, true); return 1 } ?? 0
-        case .open(let name) where (name as NSString).pathExtension == "something":
-            // An export goes to the app, which imports it as a double click in Finder does.
-            if let missing = Command.missingExport(name) {
-                say(missing, true)
-                return 1
-            }
-            return door.deliver(URL(fileURLWithPath: name).standardizedFileURL).map { say($0, true); return 1 } ?? 0
         case .open(let name) where !Spaces.isName(name):
             let url = URL(fileURLWithPath: name).standardizedFileURL
-            guard let space = Command.kept(url, places) else {
-                say(Command.elsewhere(url), true)
+            // A space by its path opens; anything else goes to the app, which imports it as a double click in Finder does.
+            if let space = Command.kept(url, places) { return door.deliver(space.location).map { say($0, true); return 1 } ?? 0 }
+            if let refused = Command.refused(name) {
+                say(refused, true)
                 return 1
             }
-            return door.deliver(space.location).map { say($0, true); return 1 } ?? 0
+            return door.deliver(url).map { say($0, true); return 1 } ?? 0
         case .open(let name):
             guard let space = Spaces(root: places.spaces).named(name) else {
                 say("There is no space \(name) in \(places.spaces.path). Type something new \(name) to make it.", true)
@@ -193,12 +189,6 @@ enum Command: Equatable {
     /// The name a space at `url` would have: its file's name without .html, or its folder's.
     static func name(of url: URL) -> String {
         url.pathExtension == "html" ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent
-    }
-
-    /// What to do with the page at `url`, outside the spaces folder: something opens only that folder's spaces.
-    static func elsewhere(_ url: URL) -> String {
-        let named = Spaces.isName(name(of: url)) ? name(of: url) : "<name>"
-        return "something opens spaces from ~/something/spaces. Copy it there, then run: something open \(named)"
     }
 
     /// The path that stays the same across upgrades. Homebrew installs in <prefix>/Cellar/something/<version>/ and

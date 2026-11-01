@@ -97,8 +97,9 @@ enum Levels {
     }
 
     /// The folders the Mac's agents work in, as `state` knows them, each once, in order: Run's choices.
-    static func folders(_ state: SomethingCore.State) -> [String] {
-        Array(Set(state.agents.compactMap(\.folder))).sorted().prefix(8).map { $0 }
+    static func folders(_ state: SomethingCore.State) -> [String] { folders(state.agents) }
+    static func folders(_ agents: [Agent]) -> [String] {
+        Array(Set(agents.compactMap(\.folder))).sorted().prefix(8).map { $0 }
     }
 
     /// `folder`, as a page declares it ("~/code/shop"), made absolute when it is a folder on this Mac; else nil.
@@ -207,21 +208,29 @@ extension Ask {
         }
         if let description = question.description { lines.addArrangedSubview(Sheet.label([(description, false)], Look.medium, color: .ink2, width: text)) }
         if let last = lines.arrangedSubviews.last { lines.setCustomSpacing(14, after: last) }
+        let choice = choosing(question, home: home, width: text)
+        lines.addArrangedSubview(choice.view)
+        let sheet = Sheet(icon: .symbol("person.2"), title: "\(question.space) would like to work with your agents", block: lines, fine: Levels.sheetFine,
+                          actions: [.init(title: "Don’t Allow", role: .cancel, hint: "esc"), .init(title: "Allow", role: .primary)], width: rightsWidth)
+        choice.follow(sheet, sheet.buttons[1])
+        return (sheet, choice.chosen)
+    }
+
+    /// The sentence as a part of a sheet, pre-set from `question`: its view; `follow`, which keeps a sheet's height and
+    /// its action, which waits for Run's folder, with the sentence; and what the person chose.
+    static func choosing(_ question: RightsQuestion, home: String, width: CGFloat) -> (view: NSView, follow: (Sheet, SheetButton) -> Void, chosen: () -> LevelChoice) {
         let answer = LevelAnswer(LevelChoice(level: question.level, scope: question.scope, start: question.kinds.count == 1 ? Grant.Start(kind: question.kinds[0]) : nil,
                                              folder: question.folder.map { .path($0) } ?? .none))
         var refit: () -> Void = {}
-        let choice = NSHostingView(rootView: LevelSheetView(answer: answer, question: question, home: home, width: text) { refit() })
-        lines.addArrangedSubview(choice)
-        choice.widthAnchor.constraint(equalToConstant: text).isActive = true
-        let sheet = Sheet(icon: .symbol("person.2"), title: "\(question.space) would like to work with your agents", block: lines, fine: Levels.sheetFine,
-                          actions: [.init(title: "Don’t Allow", role: .cancel, hint: "esc"), .init(title: "Allow", role: .primary)], width: rightsWidth)
-        let allow = sheet.buttons[1]
-        allow.enable(answer.ready)
-        refit = { [weak sheet] in
-            allow.enable(answer.ready)
-            sheet?.refit()
-        }
-        return (sheet, {
+        let view = NSHostingView(rootView: LevelSheetView(answer: answer, question: question, home: home, width: width) { refit() })
+        view.widthAnchor.constraint(equalToConstant: width).isActive = true
+        return (view, { sheet, action in
+            action.enable(answer.ready)
+            refit = { [weak sheet] in
+                action.enable(answer.ready)
+                sheet?.refit()
+            }
+        }, {
             var chosen = answer.choice
             // A scope left as the page declares it follows the page: only a change of the person's is kept.
             if chosen.scope == question.scope { chosen.scope = nil }

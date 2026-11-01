@@ -16,7 +16,7 @@ import WebKit
 
 final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     let space: Space, places: Places, engine: Engine, ask: Asking
-    let web: WKWebView
+    let web: SpaceWeb
     /// The space's place in the window: the web view, the script error strip above it, and what covers it while the
     /// page is stopped.
     let area = NSView()
@@ -176,7 +176,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
 
     /// A web view for a space, the app's window's and the check's alike: `scheme` as its only source and Lockdown's
     /// `rules`. Nothing answers it until `hold` gives it its holder.
-    static func webView(_ scheme: Scheme, rules: WKContentRuleList) -> WKWebView {
+    static func webView(_ scheme: Scheme, rules: WKContentRuleList) -> SpaceWeb {
         let config = WKWebViewConfiguration()
         // A new store at each opening: localStorage and cookies end with the window, and no space reads another's.
         config.websiteDataStore = .nonPersistent()
@@ -185,7 +185,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         // Safe Browsing looks addresses up on the Internet.
         config.preferences.isFraudulentWebsiteWarningEnabled = false
         config.userContentController.add(rules)
-        return WKWebView(frame: NSRect(x: 0, y: 0, width: 900, height: 640), configuration: config)
+        return SpaceWeb(frame: NSRect(x: 0, y: 0, width: 900, height: 640), configuration: config)
     }
 
     /// Makes `holder` answer `web`: the space's calls (something), the links Lockdown's guard hands over (link), and

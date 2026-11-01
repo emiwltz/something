@@ -14,6 +14,10 @@ public struct Received {
     public let files: [String: Data]
     /// The memory, when the export carried it.
     public let data: [String: Any]?
+
+    public init(name: String, form: Space.Form, files: [String: Data], data: [String: Any]?) {
+        (self.name, self.form, self.files, self.data) = (name, form, files, data)
+    }
 }
 
 public enum Export {

@@ -266,7 +266,9 @@ final class CheckPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         window.ignoresMouseEvents = true
         window.hasShadow = false
         window.isReleasedWhenClosed = false
-        window.collectionBehavior = [.transient, .ignoresCycle]
+        // Above the app's own window and any full screen: a covered window does not paint, and the check also runs in the app.
+        window.level = .floating
+        window.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
         window.contentView = web
         window.orderFrontRegardless()
         let deadline = Date().addingTimeInterval(seconds)

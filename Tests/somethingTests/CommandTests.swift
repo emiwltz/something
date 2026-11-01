@@ -196,22 +196,28 @@ final class FakeDoor: Door {
 
         let missing = Ran(["open", "garden"], home, door)
         #expect(missing.status == 1 && missing.err.contains("something new garden"))
-        // A page elsewhere is told where to go; one of the spaces folder, given by its path, opens.
+        // One of the spaces folder, given by its path, opens; a page elsewhere goes to the app, which imports it.
         #expect(Ran(["open", board.location.path], home, door).status == 0 && door.delivered == [board.location, board.location])
-        for path in ["/Users/example/Downloads/board.html", "/Users/example/My Board"] {
-            let elsewhere = Ran(["open", path], home, door)
-            #expect(elsewhere.status == 1 && elsewhere.err.hasPrefix("something opens spaces from ~/something/spaces. Copy it there, then run: something open "))
-        }
-        #expect(Ran(["open", "/Users/example/Downloads/board.html"], home, door).err.hasSuffix("something open board\n"))
-        #expect(Ran(["open", "/Users/example/My Board"], home, door).err.hasSuffix("something open <name>\n"))
-        #expect(door.delivered.count == 2)
+        let plain = home.root.appendingPathComponent("My Board.html"), folder = home.root.appendingPathComponent("A Folder")
+        try "<p>Invented.</p>".write(to: plain, atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        #expect(Ran(["open", plain.path], home, door).status == 0 && Ran(["open", folder.path], home, door).status == 0)
+        #expect(door.delivered.suffix(2).map(\.lastPathComponent) == ["My Board.html", "A Folder"])
+        // What it cannot take is said here, nothing starts.
+        let text = home.root.appendingPathComponent("notes.txt")
+        try "Invented.".write(to: text, atomically: true, encoding: .utf8)
+        let txt = Ran(["open", text.path], home, door)
+        #expect(txt.status == 1 && txt.err == "something can’t import notes.txt. It takes a folder, an .html file or a .something file.\n", "\(txt.err)")
+        let gone = Ran(["open", "/Users/example/Downloads/board.html"], home, door)
+        #expect(gone.status == 1 && gone.err.hasPrefix("There is no file at /Users/example/Downloads/board.html"))
+        #expect(door.delivered.count == 4)
 
         // An export goes to the app, which imports it; a missing one is said here.
         let export = home.root.appendingPathComponent("garden.something")
         try Data("{}".utf8).write(to: export)
         #expect(Ran(["open", export.path], home, door).status == 0 && door.delivered.last == export.standardizedFileURL)
         let none = Ran(["open", home.root.appendingPathComponent("nothing.something").path], home, door)
-        #expect(none.status == 1 && none.err.contains("give the path of an export") && door.delivered.count == 3)
+        #expect(none.status == 1 && none.err.contains("give the path of a folder, an .html file or a .something file") && door.delivered.count == 5)
 
         door.problem = "something could not be started: invented. Try again."
         let refused = Ran([], home, door)

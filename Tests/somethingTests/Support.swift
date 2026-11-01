@@ -100,11 +100,49 @@ final class FakeAsk: Asking {
         return exports(included)
     }
     func importFile() -> URL? { chosen }
+    /// What was checked, and whether Cancel is pressed during the check.
+    var checked: [String] = [], cancelsCheck = false
+    func checking(_ file: String, while work: @escaping () async -> Void) async -> Bool {
+        checked.append(file)
+        await work()
+        return !cancelsCheck
+    }
+    /// What each import found, and the sentence's answer: nil cancels. By default as it stands, None.
+    var found: [Import.Found] = [], imports: (Import.Found) -> LevelChoice? = { _ in LevelChoice() }
+    func found(_ found: Import.Found) async -> LevelChoice? {
+        self.found.append(found)
+        return imports(found)
+    }
     func folder(_ message: String) -> URL? {
         folderMessages.append(message)
         return folder
     }
     func tell(_ message: String) { told.append(message) }
+}
+
+/// A drag of `files` over a view, as AppKit hands it, at a point of `window`.
+final class FakeDrag: NSObject, NSDraggingInfo {
+    let draggingPasteboard = NSPasteboard(name: NSPasteboard.Name("something-test-drag-\(UUID().uuidString)"))
+    let draggingLocation: NSPoint, draggingDestinationWindow: NSWindow?
+    var draggedImageLocation: NSPoint { draggingLocation }
+    var draggingSourceOperationMask: NSDragOperation { .every }
+    var draggedImage: NSImage? { nil }
+    var draggingSource: Any? { nil }
+    var draggingSequenceNumber: Int { 1 }
+    var draggingFormation = NSDraggingFormation.default, animatesToDestination = false, numberOfValidItemsForDrop = 1
+    var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+
+    init(_ files: [URL], at point: NSPoint = NSPoint(x: 100, y: 100), in window: NSWindow? = nil) {
+        (draggingLocation, draggingDestinationWindow) = (point, window)
+        draggingPasteboard.clearContents()
+        draggingPasteboard.writeObjects(files as [NSURL])
+    }
+
+    func slideDraggedImage(to screenPoint: NSPoint) {}
+    func resetSpringLoading() {}
+    func enumerateDraggingItems(options: NSDraggingItemEnumerationOptions, for view: NSView?, classes: [AnyClass],
+                                searchOptions: [NSPasteboard.ReadingOptionKey: Any], using block: @escaping (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {}
+    deinit { draggingPasteboard.releaseGlobally() }
 }
 
 /// Listens on 127.0.0.1, on a port the system chooses, and records every connection (with its first line when the

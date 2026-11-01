@@ -16,6 +16,7 @@ import Testing
     /// The library of the test's home; its Trash is the folder `Trash` of that home, and Finder is never opened.
     func library(_ test: Home, _ ask: FakeAsk) -> Library {
         let library = Library(places: test.places, ask: ask, share: Home.share)
+        library.checker = { _, _ in (try? CheckTests.runner(test)) ?? CheckRunner(places: test.places, share: Home.share) }
         library.reveal = { _ in Issue.record("Show in Finder was not expected") }
         let trash = test.root.appendingPathComponent("Trash")
         library.discard = { url in
@@ -306,6 +307,7 @@ import Testing
         library.export("board")
         ask.chosen = try #require(exported.last).url
         library.importChosen()
+        await library.arriving?.value
         #expect(ask.told.isEmpty && library.entry("board-2")?.space.form == .folder, "\(ask.told)")
         #expect(try Data(contentsOf: test.places.spaces.appendingPathComponent("board-2/index.html")) == Data(index.utf8))
         #expect(try Memory(folder: test.places.data, space: "board-2").get("seen") as? [String] == ["a1"])
@@ -327,17 +329,19 @@ import Testing
         library.opened = { opened.append($0) }
         ask.chosen = older
         library.importChosen()
+        await library.arriving?.value
         #expect(ask.told.isEmpty, "\(ask.told)")
         #expect(library.selection == .space("board-2") && library.entry("board-2")?.space.form == .folder)
         #expect(await wait(30, until: { opened.last == .space("board-2") }))
-        #expect(try AppFile.read(test.places.grants).spaces["board-2"] == nil, "an imported space has no grant")
+        #expect(try AppFile.read(test.places.grants).spaces["board-2"]?.level == Grant.Level.none, "an imported space inherits no grant, and starts at None")
         #expect(try Memory(folder: test.places.data, space: "board-2").get("seen") as? [String] == ["a1"])
 
         // A grants file that does not read: the grant cannot be dropped, so nothing is written, and that is said.
         try "not json".write(to: test.places.grants, atomically: true, encoding: .utf8)
         let before = try FileManager.default.contentsOfDirectory(atPath: test.places.spaces.path).sorted()
         library.importChosen()
-        #expect(ask.told.count == 1 && ask.told.last?.hasPrefix("board.something was not imported. The grants in") == true, "\(ask.told)")
+        await library.arriving?.value
+        #expect(ask.told.count == 1 && ask.told.last?.hasPrefix("something can’t import board.something. The grants in") == true, "\(ask.told)")
         #expect(try FileManager.default.contentsOfDirectory(atPath: test.places.spaces.path).sorted() == before, "no space left")
         #expect(!FileManager.default.fileExists(atPath: Memory(folder: test.places.data, space: "board-3").file.path))
     }
@@ -369,7 +373,7 @@ import Testing
         #expect(ask.told.count == 3 && ask.told.last?.hasPrefix("“board” was not exported.") == true && ask.told.last?.contains("is a link") == true, "\(ask.told)")
     }
 
-    @Test func aRefusedImportSaysWhyAndAGoneSpaceLosesItsGrants() throws {
+    @Test func aRefusedImportSaysWhyAndAGoneSpaceLosesItsGrants() async throws {
         let test = Home(prefix: "something-library-"), ask = FakeAsk()
         defer { test.remove() }
         try test.space("notes", page(nil, ""))
@@ -379,6 +383,7 @@ import Testing
         try JSONSerialization.data(withJSONObject: try #require(fixture?["export"])).write(to: chosen)
         ask.chosen = chosen
         library.importChosen()
+        await library.arriving?.value
         #expect(ask.told.count == 1 && ask.told[0].contains("(IMPORT_UNSAFE_PATH)"), "\(ask.told)")
         #expect(library.entries.map(\.id) == ["notes"])
 

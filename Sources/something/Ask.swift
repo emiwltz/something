@@ -1,5 +1,5 @@
 // The sheets that ask the person, on the main window: a space's level with your agents (Levels.swift draws it), a mode that makes an agent ask less,
-// a link a space wants to open, whether an export carries the space's memory, where to find a file to import,
+// a link a space wants to open, whether an export carries the space's memory, what to import (Import.swift draws what it found),
 // the folder a template follows, moving a space to the Trash, quitting while requests wait or agents work, switching
 // the assistant's builder, and how to get one. A space cannot draw them, so a space cannot answer them.
 // Each one names the space it is about. A space asks through `Asking`, so its tests answer without a window.
@@ -45,8 +45,13 @@ protocol Asking: AnyObject {
     /// Whether the export of `entry` carries its memory of `entries` entries, `included` ticked at first; nil when the
     /// person cancels, or the sheet could not be shown.
     func export(_ entry: Library.Entry, entries: Int, included: Bool) -> Bool?
-    /// The file to import; nil when the person cancels.
+    /// The folder or file to import; nil when the person cancels.
     func importFile() -> URL?
+    /// Says that `file` is being checked while `work` runs, and returns once it is over; false when the person pressed
+    /// Cancel, and then `work` is left to end alone.
+    @MainActor func checking(_ file: String, while work: @escaping () async -> Void) async -> Bool
+    /// What the check found and the sentence; the person's choice, or nil when they cancel or the sheet could not be shown.
+    @MainActor func found(_ found: Import.Found) async -> LevelChoice?
     /// A folder the person chooses, `message` saying what for; nil when they cancel.
     func folder(_ message: String) -> URL?
     /// Says a failure that has no window of its own.
@@ -63,6 +68,13 @@ final class NativeAsk: Asking {
     /// Shows `sheet`, begun by `begin` on the window, and waits for its answer. nil when there is no window or another
     /// sheet is up: one question at a time, and the second is answered as Escape would.
     private func wait(_ sheet: NSWindow, _ begin: (NSWindow, @escaping (NSApplication.ModalResponse) -> Void) -> Void) -> NSApplication.ModalResponse? {
+        guard let window = free() else { return nil }
+        begin(window) { NSApp.stopModal(withCode: $0) }
+        return NSApp.runModal(for: sheet)
+    }
+
+    /// The window, in front, when it can take a sheet.
+    private func free() -> NSWindow? {
         guard let window = window(), window.attachedSheet == nil else { return nil }
         // The focus stays where the person is: an app in the background shows the sheet behind and bounces its icon.
         if NSApp.isActive {
@@ -71,8 +83,14 @@ final class NativeAsk: Asking {
             window.orderFront(nil)
             NSApp.requestUserAttention(.informationalRequest)
         }
-        begin(window) { NSApp.stopModal(withCode: $0) }
-        return NSApp.runModal(for: sheet)
+        return window
+    }
+
+    /// Hangs `sheet` and returns the role of the action pressed, nil when nothing was or it could not be shown. The app
+    /// goes on meanwhile: no modal loop, so a check can run under it.
+    @MainActor private func shown(_ sheet: Sheet) async -> Sheet.Role? {
+        guard let window = free() else { return nil }
+        return await withCheckedContinuation { gone in sheet.hang(on: window) { gone.resume(returning: $0) } }
     }
 
     private func wait(_ alert: NSAlert) -> NSApplication.ModalResponse? {
@@ -117,8 +135,26 @@ final class NativeAsk: Asking {
 
     func importFile() -> URL? {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "something") ?? .json, .json, .html]
+        panel.allowedContentTypes = [UTType(filenameExtension: "something") ?? .json, .json, .html, .folder]
+        (panel.canChooseDirectories, panel.message, panel.prompt) = (true, "A folder, an .html file or a .something file", "Import")
         return chosen(panel)
+    }
+
+    @MainActor func checking(_ file: String, while work: @escaping () async -> Void) async -> Bool {
+        let sheet = Ask.checking(file)
+        let task = Task { @MainActor in
+            await work()
+            if sheet.chosen == nil { sheet.ended() }
+        }
+        let role = await shown(sheet)
+        // Not shown, nothing took it away: the work still decides.
+        if role == nil { await task.value }
+        return role != .cancel
+    }
+
+    @MainActor func found(_ found: Import.Found) async -> LevelChoice? {
+        let sheet = Ask.found(found)
+        return await shown(sheet.sheet) == .primary ? sheet.answer() : nil
     }
 
     func folder(_ message: String) -> URL? {
