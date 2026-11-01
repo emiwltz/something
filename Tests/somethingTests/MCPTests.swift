@@ -2,7 +2,8 @@
 // answers to the few methods it serves, and that a call goes through the same checks as every lent tool.
 import Foundation
 import Testing
-@testable import SomethingAgents
+import SomethingAgents
+@testable import something
 
 @Suite struct MCPTests {
     /// A Lent of every tool whose commands answer at once with their words, and the words each call ran.

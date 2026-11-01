@@ -2,10 +2,11 @@
 // message per line on standard input and output. An agent that takes MCP servers at launch starts it itself (its
 // driver says how: a command-line option, the conversation's config, ACP's session/new), as a program of its own, outside the sandbox of its commands. It serves only tools (initialize, ping, tools/list, tools/call), each call run as Lent runs it, in turn.
 import Foundation
+import SomethingAgents
 
 extension Lent {
     /// Serves LentTool.all, run by `program` in `environment`, until the agent closes standard input.
-    public static func serve(program: String, environment: [String: String], version: String) {
+    static func serve(program: String, environment: [String: String], version: String) {
         let lent = Lent(tools: LentTool.all, run: Lent.program(program, environment: environment), refused: { _, _ in }, hop: { $0(); $1() })
         while let line = readLine() {
             if let answer = lent.answer(Data(line.utf8), version: version) { FileHandle.standardOutput.write(answer + Data("\n".utf8)) }
@@ -14,7 +15,7 @@ extension Lent {
 
     /// The line that answers the agent's line `line`; nil for a notification, or a response, which ask for none. A
     /// call's tool runs before this returns: `hop` must run its work at once (`serve`'s does).
-    package func answer(_ line: Data, version: String) -> Data? {
+    func answer(_ line: Data, version: String) -> Data? {
         guard let message = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else {
             return Lent.frame(["id": NSNull(), "error": ["code": -32700, "message": "something's MCP server reads one JSON object per line."]])
         }
