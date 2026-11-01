@@ -144,7 +144,7 @@ final class CheckRunner {
         }
         let memory = output.appendingPathComponent("memory-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: memory) }
-        let host = CheckHost(state: state, granted: granted, declared: declaration.rights, memory: kept ? Memory(folder: memory, space: space.name) : nil)
+        let host = CheckHost(state: state, granted: granted, declared: declaration.rights, memory: kept || check.stage ? Memory(folder: memory, space: space.name) : nil)
         do {
             let page = try CheckPage(space: space, host: host, share: share, rules: try await Lockdown.ruleList())
             page.loaded = loaded

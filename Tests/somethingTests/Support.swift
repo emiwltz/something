@@ -100,6 +100,8 @@ final class FakeAsk: Asking {
         return exports(included)
     }
     func importFile() -> URL? { chosen }
+    /// Whether a sheet holds the window.
+    var occupied = false
     /// What was checked, and whether Cancel is pressed during the check.
     var checked: [String] = [], cancelsCheck = false
     func checking(_ file: String, while work: @escaping () async -> Void) async -> Bool {

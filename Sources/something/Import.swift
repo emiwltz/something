@@ -30,6 +30,8 @@ enum Import {
         /// The contract of an export of something; nil for anything else.
         var contract: Int?
         var left: [String] = [], memory = 0
+        /// Whether the page painted: only then can it be said what it tried.
+        var loaded = true
         /// What the page's rights use, and the sentence, pre-set at None; both nil when it asks nothing of your agents.
         var needs: Grant.Level?, question: RightsQuestion?
     }
@@ -74,7 +76,9 @@ enum Import {
         let files = try space.files().map { file -> (String, Data) in
             do { return (file.path, try Data(contentsOf: file.url)) } catch { throw SpaceError("\(file.path) cannot be read: \(error.localizedDescription)") }
         }
-        guard files.contains(where: { $0.0 == "index.html" }) else { throw SpaceError("The index.html of this folder is a link to somewhere else.") }
+        guard files.contains(where: { $0.0 == "index.html" }) else {
+            throw SpaceError(Versions.isLink(space.page) ? "The index.html of this folder is a link to somewhere else." : "This folder has no index.html. \(kinds)")
+        }
         let name = slug(url.lastPathComponent)
         return Incoming(received: Received(name: name, form: .folder, files: Dictionary(uniqueKeysWithValues: files), data: nil), left: Library.links(space))
     }
@@ -87,7 +91,7 @@ enum Import {
     static func slug(_ words: String) -> String {
         let plain = words.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil).lowercased()
         let parts = plain.unicodeScalars.map { Spaces.isName(String($0)) ? Character($0) : "-" }
-        let name = String(parts).split(separator: "-").joined(separator: "-")
+        let name = String(String(parts).split(separator: "-").joined(separator: "-").prefix(100))
         return name.isEmpty ? "imported" : name
     }
 
@@ -107,20 +111,14 @@ enum Import {
         return space
     }
 
-    /// `page` with a declaration in its head holding its `<title>`, or the words of `name`. Found by bytes: a page may
-    /// be in any encoding, and all it holds stays as it is.
+    /// `page` with a declaration where an export puts its block, holding its `<title>` or the words of `name`. Found
+    /// by bytes: a page may be in any encoding, and all it holds stays as it is.
     static func declaring(_ page: Data, name: String) -> Data {
-        let lower = Data(page.map { (0x41...0x5A).contains($0) ? $0 + 32 : $0 })
-        func past(_ mark: String) -> Data.Index? {
-            lower.range(of: Data(mark.utf8)).flatMap { start in lower[start.upperBound...].firstIndex(of: 0x3E) }.map { $0 + 1 }
-        }
-        let title = title(of: page) ?? words(name)
-        let object: [String: Any] = ["contract": Declaration.known, "title": title]
+        let object: [String: Any] = ["contract": Declaration.known, "title": title(of: page) ?? words(name)]
         // Nothing in JSON but a string holds a "<", so no title can end the script.
         let json = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
             .map { String(decoding: $0, as: UTF8.self).replacingOccurrences(of: "<", with: "\\u003c") } ?? "{\"contract\": 1}"
-        let block = Data("<script type=\"application/json\" id=\"something\">\(json)</script>".utf8)
-        let at = past("<head") ?? past("<!doctype") ?? page.startIndex
+        let block = Data("<script type=\"application/json\" id=\"something\">\(json)</script>".utf8), at = Export.opening(of: page)
         return Data(page[..<at]) + block + Data(page[at...])
     }
 
@@ -138,19 +136,37 @@ enum Import {
         return spaced.prefix(1).uppercased() + spaced.dropFirst()
     }
 
+    /// The address a RESOURCE_BLOCKED problem names, when it has a host: code from a string or a `file:` load has none.
+    private static func host(_ problem: Problem) -> String? {
+        guard problem.code == "RESOURCE_BLOCKED" else { return nil }
+        return problem.message.split(separator: " ").first.flatMap { URL(string: String($0))?.host }
+    }
+
+    /// `problem` in the app's words, one sentence per code. Never its message: a script's error is the page's own text,
+    /// and no page writes in a sheet.
+    static func said(_ problem: Problem) -> String {
+        if host(problem) != nil { return "A part comes from the Internet, so it stays empty." }
+        switch problem.code {
+        case "RESOURCE_BLOCKED": return problem.message.hasPrefix("The page ran code") ? "It runs code from a string, which a space cannot do." : "A part comes from outside it, so it stays empty."
+        case "SCRIPT_ERROR", "PROMISE_REJECTED", "CONSOLE_ERROR": return "A script on the page fails, so part of it may not work."
+        case "LOAD_TIMEOUT": return "The page did not finish loading in time."
+        case "LOAD_FAILED", "PAGE_CRASHED": return "The page could not be shown."
+        default: return Codes.all[problem.code]?.when ?? "The check found a problem."
+        }
+    }
+
     /// What a `report` of the copy `space` says, for the sheet; `question` is the sentence, when the page needs one.
     static func found(_ report: Report, in space: Space, file: String, incoming: Incoming, question: RightsQuestion?) -> Found {
         let serious = report.problems.filter { $0.level == .fatal || $0.level == .error || $0.code == "RESOURCE_BLOCKED" }
-        // The row beside it names the address: this one says what it means for the page.
-        let said = serious.map { $0.code == "RESOURCE_BLOCKED" ? "Something it loads comes from the Internet, so it stays empty." : $0.message }
-        let hosts = report.problems.filter { $0.code == "RESOURCE_BLOCKED" }.compactMap { problem in
-            problem.message.split(separator: " ").first.flatMap { URL(string: String($0))?.host }
-        }
+        var said: [String] = []
+        for problem in serious where !said.contains(Import.said(problem)) { said.append(Import.said(problem)) }
         let weight = space.form == .folder ? "\(report.size?.files ?? 0) file\(report.size?.files == 1 ? "" : "s")" : Size.words(report.size?.bytes ?? 0)
-        return Found(file: file, title: report.declaration?.title ?? words(space.name), weight: weight, problems: said,
+        // A title is the page's claim: one line, of a length the sheet can hold.
+        let title = (report.declaration?.title ?? words(space.name)).split(whereSeparator: \.isNewline).joined(separator: " ")
+        return Found(file: file, title: String(title.prefix(80)), weight: weight, problems: said,
                      warnings: report.problems.filter { $0.level == .warning }.count - serious.filter { $0.level == .warning }.count,
-                     blocked: Array(Set(hosts)).sorted(), contract: incoming.exported ? report.declaration?.contract ?? Declaration.known : nil,
-                     left: incoming.left, memory: incoming.received.data?.count ?? 0,
+                     blocked: Array(Set(report.problems.compactMap(host))).sorted(), contract: incoming.exported ? report.declaration?.contract ?? Declaration.known : nil,
+                     left: incoming.left, memory: incoming.received.data?.count ?? 0, loaded: report.snapshot != nil,
                      needs: question == nil ? nil : report.declaration.map { Grant.Level.needed(by: $0.rights) }, question: question)
     }
 }
@@ -180,7 +196,7 @@ extension Library {
             var incoming = try Import.incoming(at: url)
             let staged = try Import.stage(&incoming, in: stage, home: places.home)
             var checked: Result<Report, Error>?
-            guard await ask.checking(file, while: { checked = await Result { try await runner.run(Check(space: staged.location.path)) } }), let report = try checked?.get() else { return }
+            guard await ask.checking(file, while: { checked = await Result { try await runner.run(Check(space: staged.location.path, stage: true)) } }), let report = try checked?.get() else { return }
             let found = Import.found(report, in: staged, file: file, incoming: incoming, question: question(report.declaration, of: staged))
             guard let choice = await ask.found(found) else { return }
             let spaces = Spaces(root: places.spaces)
@@ -247,9 +263,9 @@ extension Ask {
         if bad > 3 { rows.append(.init(mark: .symbol("ellipsis"), label: [("And \(bad - 3) more", false)], meta: nil)) }
         if let contract = found.contract { rows.append(.init(mark: .symbol("square.3.layers.3d"), label: [("An export from something", false)], meta: "contract \(contract)")) }
         if bad == 0 { rows.append(.init(mark: .symbol("checkmark"), label: [("No errors", false)], meta: "\(found.warnings) warning\(found.warnings == 1 ? "" : "s")")) }
-        // An export of something was checked as it left: said only when it tried.
+        // An export says so only when it tried: its page was checked here all the same.
         if found.contract == nil || !found.blocked.isEmpty {
-            let meta = found.blocked.isEmpty ? "nothing to block" : found.blocked.count == 1 ? "\(found.blocked[0]) is blocked" : "\(found.blocked.count) addresses are blocked"
+            let meta = found.blocked.isEmpty ? found.loaded ? "nothing to block" : "not loaded" : found.blocked.count == 1 ? "\(found.blocked[0]) is blocked" : "\(found.blocked.count) addresses are blocked"
             rows.append(.init(mark: .symbol("lock"), label: [("It stays off the network", false)], meta: meta))
         }
         if !found.left.isEmpty { rows.append(.init(mark: .symbol("link"), label: [("Links stay out", false)], meta: found.left.count == 1 ? found.left[0] : "\(found.left.count) links")) }
@@ -282,8 +298,9 @@ final class Drops {
     /// Whether a drag over a page is the app's: all of it is what import takes. Anything else, a picture, a .txt, a mix,
     /// is the page's, to leave to its own drop zones.
     static func overPage(_ drag: NSDraggingInfo) -> Bool {
+        // A drag begun in this app is a page's own, whatever it says it holds; one from Finder has no source here.
         let files = files(drag)
-        return !files.isEmpty && files.allSatisfy(Import.dropped)
+        return drag.draggingSource == nil && !files.isEmpty && files.allSatisfy(Import.dropped)
     }
 
     func over(_ on: Bool) -> NSDragOperation {

@@ -358,6 +358,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         if grant == nil { launched = [] }
         let asked = Rights.toAsk(declaration, since: grant)
         guard !asked.isEmpty else { return grant }
+        // Under an import's sheet, which lets the app run: nobody answered, so nothing is kept, and the next opening asks.
+        guard !ask.occupied else { return grant }
         let answer = ask.rights(question(declaration, grant)), at = iso8601.string(from: Date())
         let folder = answer?.folder == .blank ? places.blank(space.name) : answer?.folder.path
         // Applied to the grant as the file holds it after the sheet, so that a change made meanwhile stays.

@@ -11,7 +11,7 @@ import SomethingCore
 import WebKit
 
 final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDelegate {
-    /// The space named on the command line, or the path of an export; nil to open the last space open.
+    /// The space named on the command line, or a path to open or import; nil to open the last space open.
     let opening: String?
     let places = Places.person
     let engine = Engine(environment: ProcessInfo.processInfo.environment, registry: .app)
@@ -143,7 +143,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             library.watch()
             let early = handed ?? []
             handed = nil
-            if let opening, (opening as NSString).pathExtension == "something" {
+            if let opening, !Spaces.isName(opening) {
                 receive(URL(fileURLWithPath: opening).standardizedFileURL)
             } else if let opening {
                 guard library.entry(opening) != nil else {

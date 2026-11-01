@@ -166,8 +166,9 @@ The person answers with one **level** for the whole space, never right by right:
 | Run | start | `state`, `send`, `launch`, or `launch:<kind>` when the person named the agent, in the folder the person picks (`granted.folder`, whatever `folder` declares) |
 
 `store` needs no permission: declared, it is always granted. A space made on something's New Space opens with the level
-the person chose there, before it was built; any other space (a template, an import, a page an agent wrote outside
-something) asks for its level in a window of the Mac at its first opening, pre-set to the highest level its rights use.
+the person chose there, before it was built; any other space (a template, a page an agent wrote outside something)
+asks for its level in a window of the Mac at its first opening, pre-set to the highest level its rights use. An import
+asks in the same way, pre-set to None.
 A right above the level is refused without asking again, until the person changes it in the panel beside your space,
 one sentence that applies at once (your page hears `"granted"`). Which agents `state` shows starts as the scope you declare
 in `agents`: keep it to the folders the page is about. The person may then change it: all agents on this Mac or one

@@ -112,7 +112,7 @@ public enum Export {
     /// Where the block goes in `page`, or stands in a file made from one: past a byte order mark, white space, comments
     /// and the doctype, since anything else before a doctype would turn the page to quirks mode. HTML allows the place:
     /// the `<html>` and `<head>` that come after only merge. The same bytes come before it in both, so both find it.
-    private static func opening(of page: Data) -> Data.Index {
+    public static func opening(of page: Data) -> Data.Index {
         var at = page.startIndex + (page.starts(with: [0xEF, 0xBB, 0xBF]) ? 3 : 0)
         while true {
             while at < page.endIndex, [0x09, 0x0A, 0x0C, 0x0D, 0x20].contains(page[at]) { at += 1 }

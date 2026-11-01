@@ -491,9 +491,16 @@ import WebKit
         view.engine.stopAll(within: 6) { stopped = true }
         #expect(await wait(until: { stopped }))
 
+        // Under an import's sheet nobody can answer: nothing is asked, nothing is kept, and the next opening asks.
         ask.answer = { _ in nil }
+        ask.occupied = true
         let refused = try await home.window(other, ask)
         defer { refused.close() }
+        refused.open()
+        try await ready(refused)
+        #expect(try ask.questions.count == 1 && AppFile.read(home.places.grants).spaces["other"] == nil)
+        refused.close()
+        ask.occupied = false
         refused.open()
         try await ready(refused)
         let kept = try #require(try AppFile.read(home.places.grants).spaces["other"])

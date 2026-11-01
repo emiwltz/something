@@ -150,8 +150,9 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   which agents: all agents on this Mac, or only those in a folder. In the contract these are the levels None, Watch,
   Talk and Run. On New Space you choose it before Build, pre-set from your words (else from Settings › Permissions, "not see"
   at first): that choice is your consent, and the space opens without asking. A space made elsewhere (a template, an
-  import, an agent outside something) asks in a sheet at its first opening, with the same sentence, pre-set to what it
-  declares; Don't Allow is kept, and it does not ask again by itself. What a space declares above its level stays
+  agent outside something) asks in a sheet at its first opening, with the same sentence, pre-set to what it
+  declares; Don't Allow is kept, and it does not ask again by itself. An import says what it found and asks in the same
+  way, pre-set to "not see". What a space declares above its level stays
   refused, without asking again. Its memory needs no permission: it stays with the space. The panel (⌘I) opens on
   that sentence: a click on a word changes it at once, and the list under it, This Space Sees, is the page's own list.
   Its Info tab holds the file, its size, Export, its memory, its versions and

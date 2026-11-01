@@ -1648,7 +1648,7 @@ struct AcceptanceShell {
         let problem = Ask.found(ask.found[1]), export = Ask.found(ask.found[2])
         #expect(problem.sheet.title == "Old dashboard has 1 problem")
         #expect(PanelsTests.texts(problem.sheet.contentView).contains("cdn.example.com is blocked"), "\(PanelsTests.texts(problem.sheet.contentView))")
-        #expect(PanelsTests.texts(problem.sheet.contentView).contains("Something it loads comes from the Internet, so it stays empty."))
+        #expect(PanelsTests.texts(problem.sheet.contentView).contains("A part comes from the Internet, so it stays empty."))
         #expect(PanelsTests.texts(problem.sheet.contentView).contains("You can import it and ask its assistant to fix this. The original file doesn’t change."))
         #expect(PanelsTests.texts(export.sheet.contentView).contains("An export from something") && PanelsTests.texts(export.sheet.contentView).contains("2 entries"))
         try await stage.appearances { suffix in
@@ -1700,7 +1700,6 @@ struct AcceptanceShell {
         #expect(ask.told.last == "something can’t import notes.txt. It takes a folder, an .html file or a .something file.", "\(ask.told)")
     }
 
-    @Test("f6-3: The white tile", .disabled("not built yet: S10")) func f6_3() async throws {}
     /// F6.3: packaging/something.icns holds every size of a white tile on Apple's grid, the sign on it, and nothing
     /// around it. Day and night it is the same picture. Its place in the Dock is seen by hand only.
     @Test("f6-3: The white tile") func f6_3() async throws {

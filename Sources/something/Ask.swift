@@ -45,6 +45,8 @@ protocol Asking: AnyObject {
     /// Whether the export of `entry` carries its memory of `entries` entries, `included` ticked at first; nil when the
     /// person cancels, or the sheet could not be shown.
     func export(_ entry: Library.Entry, entries: Int, included: Bool) -> Bool?
+    /// Whether a sheet holds the window, so that another cannot be shown now.
+    var occupied: Bool { get }
     /// The folder or file to import; nil when the person cancels.
     func importFile() -> URL?
     /// Says that `file` is being checked while `work` runs, and returns once it is over; false when the person pressed
@@ -152,7 +154,11 @@ final class NativeAsk: Asking {
         return role != .cancel
     }
 
+    var occupied: Bool { window()?.attachedSheet != nil }
+
     @MainActor func found(_ found: Import.Found) async -> LevelChoice? {
+        // One sheet at a time, and an import is no reason to lose another's: it waits its turn.
+        while occupied { try? await Task.sleep(nanoseconds: 200_000_000) }
         let sheet = Ask.found(found)
         return await shown(sheet.sheet) == .primary ? sheet.answer() : nil
     }

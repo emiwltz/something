@@ -206,6 +206,8 @@ struct Check: Equatable {
     var space: String
     var json = false, journal = false
     var refuse: [String] = [], state: String?
+    /// A staged copy of an import: not of the spaces folder, yet it gets a throwaway memory, as it will have one.
+    var stage = false
 
     /// The check the words ask for, or `.wrong` with a sentence.
     static func parse(_ words: [String]) -> Command {

@@ -335,6 +335,8 @@ import Testing
         #expect(await wait(30, until: { opened.last == .space("board-2") }))
         #expect(try AppFile.read(test.places.grants).spaces["board-2"]?.level == Grant.Level.none, "an imported space inherits no grant, and starts at None")
         #expect(try Memory(folder: test.places.data, space: "board-2").get("seen") as? [String] == ["a1"])
+        let grant = try #require(try AppFile.read(test.places.grants).spaces["board-2"])
+        #expect(Rights.toAsk(Declaration(name: "board-2"), since: grant).isEmpty, "the first opening asks nothing")
 
         // A grants file that does not read: the grant cannot be dropped, so nothing is written, and that is said.
         try "not json".write(to: test.places.grants, atomically: true, encoding: .utf8)
