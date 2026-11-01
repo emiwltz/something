@@ -337,9 +337,10 @@ public final class Engine {
     /// agent seen now holds that conversation, STILL_RUNNING while its process runs, NOT_SUPPORTED when it cannot be
     /// continued here, then as `launch` does. A holder only the agent itself sees comes after the launch, as the
     /// agent's HELD_ELSEWHERE error. `agent` may be one of something's own that ended: `elsewhere` hides its conversation
-    /// until it is forgotten, and the new launch takes its place.
+    /// until it is forgotten, and the new launch takes its place. An assistant is never one: its conversation stays out of
+    /// a plain launch. No page comes this way: `can.resume` is false on every launched agent.
     public func resume(_ kind: String, thread: String, of agent: String) throws -> String {
-        let own = launched.map(\.agent.agent).first { $0.id == agent && $0.kind == kind && $0.thread == thread && $0.alive == false }
+        let own = launched.map(\.agent.agent).first { $0.id == agent && $0.kind == kind && $0.thread == thread && $0.alive == false && !assistants.contains($0.id) }
         guard let seen = own ?? elsewhere.agents.first(where: { $0.id == agent && $0.kind == kind && $0.thread == thread }), let folder = seen.folder else {
             throw CodedError("THREAD_NOT_FOUND", "No \(registry.name(of: kind)) conversation \(thread) is seen on this Mac now; use a thread id from the latest state.")
         }

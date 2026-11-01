@@ -149,6 +149,21 @@ import SomethingCore
         try await stop(engine)
     }
 
+    /// An ended assistant is not one's own to continue as a plain agent: no space may ever see its conversation.
+    @Test func anEndedAssistantIsNotContinued() async throws {
+        let home = try Home()
+        defer { home.place.remove() }
+        let engine = home.engine()
+        let id = try engine.launchAssistant("claude", folder: home.place.work.path, askEverything: true)
+        let thread = try #require(engine.state.agents.first { $0.id == id }?.thread)
+        var stopped = false
+        engine.stopAll(within: 6, only: id) { stopped = true }
+        try await until("the stop") { stopped }
+        try await until("its end") { engine.state.agents.first { $0.id == id }?.alive == false }
+        #expect(throws: CodedError.self) { try engine.resume("claude", thread: thread, of: id) }
+        #expect(engine.state.agents.filter { $0.thread == thread }.map(\.id) == [id])
+    }
+
     @Test func aCodexConversationIsContinuedUnlessItsServiceHoldsIt() async throws {
         let home = try Home()
         defer { home.place.remove() }

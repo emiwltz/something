@@ -484,4 +484,10 @@ struct Leaving: Equatable {
 /// of the space that launched it, and that space, opened again, still sees and drives it.
 final class Launches {
     var ids: [String: Set<String>] = [:]
+
+    /// The agent `id` now goes by `seen`, as a conversation seen elsewhere: the space that launched it keeps it, and no
+    /// other space gains anything.
+    func moved(_ id: String, to seen: String) {
+        for space in ids.keys where ids[space]?.remove(id) != nil { ids[space]?.insert(seen) }
+    }
 }

@@ -809,7 +809,7 @@ extension AssistantModel {
 
     /// Whether Send sends now, and whether it is Stop: while the agent works and nothing is written.
     var canSend: Bool { kind != nil && !blocked && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    /// Not while its model does not answer: the card says Stopped, and Try Again is the way on; nor while it waits for
+    /// Not while its model does not answer: the card says Ended, and Try Again is the way on; nor while it waits for
     /// an answer, which its request's window gives.
     var stops: Bool { (light == .working || quickWorks(on: place.space)) && presence.stuck != .cannotReachModel && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 

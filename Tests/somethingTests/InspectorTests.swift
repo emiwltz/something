@@ -50,9 +50,10 @@ import Testing
     /// One reading of an agent: each phase, its word and its eyes, what no source gives said as such.
     @Test func anAgentHasOneReading() {
         let runs = RunsIn { _ in [] }
-        func reading(_ origin: String = "elsewhere", kind: String = "claude", alive: Bool?, state: String, thread: String? = "t1", resume: Bool = false) -> AgentReading {
+        func reading(_ origin: String = "elsewhere", kind: String = "claude", alive: Bool?, state: String, thread: String? = "t1", resume: Bool = false, retry: Bool = false) -> AgentReading {
             var agent = Agent(id: "a1", kind: kind, origin: origin)
             (agent.alive, agent.state, agent.thread, agent.can.resume) = (alive, state, thread, resume)
+            if retry { agent.detail["apiRetry"] = .object(["attempt": .number(2)]) }
             return AgentReading(agent, thread: nil, runs: runs)
         }
         let table: [(AgentReading, AgentReading.Phase, String)] = [
@@ -61,6 +62,7 @@ import Testing
             (reading("launched", alive: true, state: "idle"), .here, "Idle"),
             (reading("launched", alive: true, state: "interrupted"), .here, "Idle"),
             (reading("launched", alive: true, state: "error"), .here, "Can’t Tell"),
+            (reading("launched", alive: true, state: "working", retry: true), .here, "Working"),
             (reading("launched", alive: false, state: "done"), .asleep, "Asleep"),
             (reading("launched", alive: false, state: "done", thread: nil), .ended, "Ended"),
             (reading("launched", kind: "pi", alive: false, state: "done"), .ended, "Ended"),
@@ -123,6 +125,18 @@ import Testing
         var here = Agent(id: "claude-1", kind: "claude", origin: "launched")
         (here.alive, here.pid) = (true, 10)
         #expect(AgentReading(here, thread: nil, runs: runs).tag == "In something" && asked == 5, "no walk for one of something's own")
+        here.alive = false
+        #expect(AgentReading(here, thread: nil, runs: runs).tag == nil && asked == 5, "a closed agent's pid may be another program's")
+    }
+
+    /// A move hands the conversation's new id to the space that launched it, and to no other.
+    @Test func aMoveStaysWithTheSpaceThatLaunchedIt() {
+        let launches = Launches()
+        launches.ids = ["shop": ["claude-1", "claude-2"], "brief": ["codex-1"]]
+        launches.moved("claude-1", to: "claude-t1")
+        #expect(launches.ids == ["shop": ["claude-t1", "claude-2"], "brief": ["codex-1"]])
+        launches.moved("claude-9", to: "claude-t9")
+        #expect(launches.ids == ["shop": ["claude-t1", "claude-2"], "brief": ["codex-1"]], "an agent only in scope gives no space a sight")
     }
 
     @Test func thePanelOpensAtOnce() async throws {

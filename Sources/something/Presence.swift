@@ -85,7 +85,7 @@ struct Presence: Equatable {
         case (.missing?, _): "\(name) isn’t on this Mac"
         case (.crashed?, _): "Stopped unexpectedly"
         case (.undelivered?, _): "Couldn’t reach \(name)"
-        // The agent tries again by itself: "Stopped" would contradict the notice.
+        // The agent tries again by itself: "Ended" would contradict the notice.
         case (.cannotReachModel?, _) where agent?.state == "working": "Retrying · can’t reach its model"
         case (nil, .sleep) where facts.waking: "Waking up…"
         case (nil, .think): step

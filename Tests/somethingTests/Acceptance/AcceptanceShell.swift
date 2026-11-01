@@ -853,7 +853,7 @@ struct AcceptanceShell {
         // The reader then sees it, as an agent elsewhere; this space keeps it in sight, by the same key, with no Ended.
         var seen = Agent(id: Engine.seenID("claude", thread: thread), kind: "claude", origin: "elsewhere")
         (seen.alive, seen.thread, seen.state, seen.pid) = (true, thread, "idle", 4_200)
-        #expect(view.launched.contains(seen.id) && Rights.key(seen) == moving.key)
+        #expect(view.launched.contains(seen.id) && !view.launched.contains(id) && Rights.key(seen) == moving.key)
         let after = AgentReading(seen, thread: nil, known: moving.title, runs: RunsIn { _ in ["/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal"] })
         #expect((after.title, after.word, after.tag, after.phase) == (moving.title, "Idle", "In Terminal", .away))
         #expect(try String(contentsOf: file, encoding: .utf8) == "#!/bin/sh\nrm -- \"$0\"\ncd '\(stage.home.places.spaces.path)' && exec 'claude' '--resume' '\(thread)'\n")

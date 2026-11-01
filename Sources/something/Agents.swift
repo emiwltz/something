@@ -51,12 +51,14 @@ struct AgentReading: Equatable {
         case .ended: .limit
         default: AgentReading.eyes(agent)
         }
-        tag = phase == .here ? "In something" : runs.app(of: agent).map { "In " + RunsIn.name($0) }
+        // A launched agent's pid outlives it, and may already be another program's.
+        tag = phase == .here ? "In something" : agent.alive == false ? nil : runs.app(of: agent).map { "In " + RunsIn.name($0) }
     }
 
     /// What the eyes of an agent not closed say, as an assistant's would. Asleep and Ended are said of a closed
-    /// conversation only: a live one that stopped on an error is neither.
+    /// conversation only: a live one that stopped on an error is neither, and one retrying its model still works.
     private static func eyes(_ agent: Agent) -> Sign.State {
+        if agent.state == "working" { return .think }
         let eyes = Presence.state(.init(name: agent.kind), agent, justDone: false).0
         return [.sleep, .limit].contains(eyes) ? .unknown : eyes
     }
@@ -78,7 +80,7 @@ final class RunsIn {
 
     init(lineage: @escaping (Int32) -> [String] = { Processes.lineage($0) }) { self.lineage = lineage }
 
-    /// The outermost `.app` of the nearest of `agent`'s ancestors inside one, or nil: a server launchd holds (tmux), a
+    /// The outermost `.app` of the nearest of `agent` and its ancestors inside one, or nil: a server launchd holds (tmux), a
     /// service, an agent with no process known. A process keeps its parents: the answer holds while it runs.
     func app(of agent: Agent) -> URL? {
         guard let pid = agent.pid.flatMap(Int32.init(exactly:)), pid > 0 else { return nil }

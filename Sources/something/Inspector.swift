@@ -157,7 +157,7 @@ import SwiftUI
 
     /// Continue in Terminal, once for an agent: something stops holding the conversation, then Terminal takes it, in the
     /// agent's folder, and the agent leaves the launched ones at once. It did not end: its row is now the conversation
-    /// seen elsewhere, still in this space's sight, while nothing shows it as Ended. A failure says so and keeps the
+    /// seen elsewhere, still in the sight of the space that launched it, while nothing shows it as Ended. A failure says so and keeps the
     /// stopped agent, so the person can try again.
     func continueInTerminal(_ reading: AgentReading) {
         let agent = reading.agent
@@ -169,7 +169,7 @@ import SwiftUI
                 try Data(Info.script(words, in: folder).utf8).write(to: file)
                 try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: file.path)
                 terminal(file)
-                view.launched.insert(Engine.seenID(agent.kind, thread: thread))
+                view.launches.moved(agent.id, to: Engine.seenID(agent.kind, thread: thread))
                 view.engine.forget(agent.id)
             } catch {
                 moving.remove(agent.id)
@@ -445,7 +445,7 @@ struct InspectorView: View {
     /// One agent: its title and state word; under them its program, its folder and where it runs.
     private func row(_ reading: AgentReading) -> some View {
         let folder = reading.folder.map { Words.path($0, home: info.places.home.path) }
-        let under = [reading.program, folder, reading.tag].compactMap { $0 }.joined(separator: " · ")
+        let under = [reading.named ? reading.program : nil, folder, reading.tag].compactMap { $0 }.joined(separator: " · ")
         return HStack(alignment: .center, spacing: 8) {
             Monogram(name: reading.program)
             VStack(alignment: .leading, spacing: 1) {

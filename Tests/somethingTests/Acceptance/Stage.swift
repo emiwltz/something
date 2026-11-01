@@ -165,6 +165,7 @@ final class Stage {
     func window(_ size: NSSize = Size.main) -> (shell: Shell, library: Library, info: Info) {
         let ask = FakeAsk()
         let library = Library(places: home.places, ask: ask, share: Home.share), info = Info(places: home.places, ask: ask)
+        info.runs = RunsIn { _ in [] }   // the world's pids are invented: no walk reads a real process
         if grouped { library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) } }
         library.relist()
         let shell = Shell(library: library, info: info, assistant: AssistantModel(engine: home.engine(), places: home.places), autosave: false)
