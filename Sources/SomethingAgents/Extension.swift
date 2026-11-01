@@ -49,6 +49,8 @@ public struct AgentDescriptor: Sendable {
     public var unavailable: String?
     /// The words that continue conversation `id` in a terminal, in its folder; nil for a kind whose way is not proven.
     public var terminal: (@Sendable (_ id: String) -> [String])?
+    /// The folder it keeps its settings and conversations in, for the person ("~/.claude"); nil where it is not known.
+    public var home: String?
     /// Its mark beside its name in the app's chips and menus, one or two letters ("CC"); nil for its name's initials.
     public var monogram: String?
 
@@ -56,11 +58,11 @@ public struct AgentDescriptor: Sendable {
                  bundled: String? = nil, refusedCopies: [String] = [], asksAsMuch: Set<String> = [], resume: Resume = .never,
                  driving: Driving? = nil, reader: (@Sendable ([String: String]) -> any Reader)? = nil, builder: Builder? = nil,
                  neverAsks: Bool = false, asksNothingByDefault: Bool = false, tools: [String: Tool] = [:], modeWords: [String: String] = [:],
-                 unavailable: String? = nil, monogram: String? = nil, terminal: (@Sendable (String) -> [String])? = nil) {
+                 unavailable: String? = nil, home: String? = nil, monogram: String? = nil, terminal: (@Sendable (String) -> [String])? = nil) {
         (self.kind, self.name, self.install, self.runsOn, self.homeFolders, self.bundled) = (kind, name, install, runsOn, homeFolders, bundled)
         (self.refusedCopies, self.asksAsMuch, self.resume, self.driving, self.reader) = (refusedCopies, asksAsMuch, resume, driving, reader)
         (self.builder, self.neverAsks, self.asksNothingByDefault) = (builder, neverAsks, asksNothingByDefault)
-        (self.tools, self.modeWords, self.unavailable, self.monogram, self.terminal) = (tools, modeWords, unavailable, monogram, terminal)
+        (self.tools, self.modeWords, self.unavailable, self.home, self.monogram, self.terminal) = (tools, modeWords, unavailable, home, monogram, terminal)
     }
 
     /// What the person's assistant gets when it is this agent.

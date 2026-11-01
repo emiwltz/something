@@ -34,6 +34,8 @@ struct Hero: View {
     /// The assistant's line: its agent and model.
     let builder: String
     var motion = Look.Motion.calm
+    /// With no program found the picture says so: nobody drawn at work, nobody asking.
+    var none = false
     let agents = Array(Registry.app.agents.prefix(3).map(\.name))
 
     var body: some View {
@@ -47,7 +49,7 @@ struct Hero: View {
                 Line(path: "M180 197 C 226 197 224 186 270 186").stroke(ink2, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [6, 4]))
                 Line(path: "M270 254 C 224 254 226 297 180 297", arrow: true).stroke(ink2, style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
                 ForEach(Array(agents.enumerated()), id: \.offset) { index, name in
-                    agent(name, ["~/code/pacman", "~/notes", "~/code/shop"][index], dot: [Look.Token.ok.ui, Look.Token.mist.ui, Look.Token.ink.ui][index])
+                    agent(none ? "An agent" : name, none ? "Not installed yet" : ["~/code/pacman", "~/notes", "~/code/shop"][index], dot: [Look.Token.ok.ui, Look.Token.mist.ui, Look.Token.ink.ui][index])
                         .offset(x: 20, y: 70 + CGFloat(index) * 100)
                 }
                 tag("eye", "Watch").offset(x: 184, y: 74)
@@ -92,8 +94,10 @@ struct Hero: View {
 
     // MARK: The pieces, at the mockup's sizes
 
-    private func card<Content: View>(_ width: CGFloat, _ height: CGFloat?, @ViewBuilder _ content: () -> Content) -> some View {
-        content().frame(width: width, height: height).boxed(RoundedRectangle(cornerRadius: 10, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line2.ui)
+    private func card<Content: View>(_ width: CGFloat, _ height: CGFloat?, dashed: Bool = false, @ViewBuilder _ content: () -> Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        return content().frame(width: width, height: height).background(dashed ? Color.clear : Look.Token.bg2.ui, in: shape)
+            .overlay(shape.strokeBorder(Look.Token.line2.ui, style: StrokeStyle(lineWidth: dashed ? 1.5 : 1, dash: dashed ? [5, 4] : [])))
     }
 
     private func code(_ words: String) -> some View {
@@ -102,15 +106,15 @@ struct Hero: View {
     }
 
     private func agent(_ name: String, _ folder: String, dot: Color) -> some View {
-        card(160, 54) {
+        card(160, 54, dashed: none) {
             HStack(spacing: 9) {
-                Monogram(name: name, fixed: true).scaleEffect(26 / 18).frame(width: 26, height: 26)
+                Monogram(name: none ? "?" : name, fixed: true).scaleEffect(26 / 18).frame(width: 26, height: 26)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(name).font(Look.fixed(.ui, size: 12.5, weight: .semibold)).foregroundStyle(Look.Token.ink.ui)
                     Text(folder).font(Look.fixed(.code, size: 9.5)).foregroundStyle(Look.Token.ink3.ui).lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                Circle().fill(dot).frame(width: 7, height: 7)
+                if !none { Circle().fill(dot).frame(width: 7, height: 7) }
             }
             .padding(.horizontal, 10)
         }
@@ -160,11 +164,11 @@ struct Hero: View {
                     Text("Before the weekend").font(Look.fixed(.ui, size: 10.5, weight: .semibold))
                     ForEach(Array(agents.enumerated()), id: \.offset) { index, name in
                         HStack(spacing: 6) {
-                            Text(Monogram.letters(name)).font(Look.fixed(.ui, size: 6.5, weight: .semibold)).frame(width: 13, height: 13)
+                            Text(none ? "?" : Monogram.letters(name)).font(Look.fixed(.ui, size: 6.5, weight: .semibold)).frame(width: 13, height: 13)
                                 .background(brown.opacity(0.1), in: RoundedRectangle(cornerRadius: 3))
                             Capsule().fill(brown.opacity(0.22)).frame(width: index == 1 ? 70 : 100, height: 4)
                             Spacer(minLength: 0)
-                            Circle().fill([grey ? brown : Look.Token.ok.ui, brown.opacity(0.25), brown][index]).frame(width: 7, height: 7)
+                            if !none { Circle().fill([grey ? brown : Look.Token.ok.ui, brown.opacity(0.25), brown][index]).frame(width: 7, height: 7) }
                         }
                     }
                 }
@@ -204,9 +208,9 @@ struct Hero: View {
                     ForEach(0..<3) { _ in Circle().fill(Look.Token.mist.ui).frame(width: 5, height: 5) }
                     Text("something · Permission").font(Look.fixed(.ui, size: 9.5)).foregroundStyle(Look.Token.ink3.ui).padding(.leading, 4)
                 }
-                Text("\(agents.last ?? "An agent") wants to run a command").font(Look.fixed(.ui, size: 11.5, weight: .semibold))
+                Text("\(none ? "An agent" : agents.last ?? "An agent") wants to run a command").font(Look.fixed(.ui, size: 11.5, weight: .semibold))
                     .foregroundStyle(Look.Token.ink.ui).fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 4) { code("npm test"); Text("in ~/code/shop") }.font(Look.fixed(.ui, size: 10)).foregroundStyle(Look.Token.ink2.ui)
+                HStack(spacing: 4) { code("npm test"); Text(none ? "Once you have one" : "in ~/code/shop") }.font(Look.fixed(.ui, size: 10)).foregroundStyle(Look.Token.ink2.ui)
                 HStack(spacing: 6) {
                     Spacer()
                     Text("Deny").padding(.horizontal, 8).frame(height: 20).boxed(RoundedRectangle(cornerRadius: 5), Look.Token.bg2.ui, ring: Look.Token.line2.ui)

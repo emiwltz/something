@@ -40,7 +40,7 @@ enum Catalog {
         ("x9-1", "S5"), ("j3-4", "S4"), ("x3-2", "S4"), ("x3-3", "S4"),
         ("2-6", "S6"), ("2-8", "S6"),
         ("j4-2", "S8"), ("x6-1", "S9"), ("x6-2", "S9"), ("x6-3", "S9"),
-        ("x2-2", "S12"), ("x2-4", "S12"), ("x8-1", "S12"), ("x8-2", "S12"), ("x0-1", "S12"),
+        ("x2-4", "S12"), ("x8-1", "S12"), ("x8-2", "S12"), ("x0-1", "S12"),
         ("6-1", "S7"), ("6-3", "S7"), ("x7-1", "S10"), ("x7-2", "S10"), ("x7-3", "S10"), ("x7-4", "S10"),
         ("x4-1", "S11"), ("x4-2", "S11"), ("x4-3", "S11"),
         ("x1-1", "S14b"), ("x1-3", "S14b"), ("2-9", "S14b"), ("2-10", "S14b"),
@@ -70,6 +70,7 @@ enum Catalog {
     /// is no screen of its own.
     static let retiredSteps: [String: String] = [
         "2-4": "the title's small card: v6.2's title opens Info itself (X9.1, S5), asserted by x9-1",
+        "x2-2": "Built by: three chips replace it in beat 3, f1-3",
         "x2-1": "the one-screen welcome: five beats replace it, f1-1 to f1-5",
         "x2-3": "the first space, for real: f1-6 draws the arrival and goes on to the first space",
         "j4-4": "the card's mode chip and \"/\" chip: v6.2's minimal card has neither (X6.1–X6.3, S9); \"/\" in the field is x6-3, the mode Settings › Advanced (x7-4)",

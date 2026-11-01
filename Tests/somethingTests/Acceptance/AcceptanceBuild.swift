@@ -13,27 +13,6 @@ import WebKit
 
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-accept-build-"))
 struct AcceptanceBuild {
-    /// X2.2, who builds, changed: choosing Codex makes it the builder of the first space, which New Space's menus
-    /// keep. The welcome's chips come back in beat 3 (S8, f1-3).
-    @Test("x2-2: Built by, changed") func x2_2() async throws {
-        let scene = try await Self.welcome()
-        defer { scene.remove() }
-        let model = scene.assistant
-        #expect(model.entries.filter(\.enabled).map(\.id) == ["claude", "codex", "opencode", "pi", "omp", "amp"])
-        model.choose("codex")
-        #expect(model.kind == "codex" && model.newKind == "codex")
-        try await scene.draw("x2-2") { words in
-            #expect(words == Self.beatWords(.page), "\(words)")
-        }
-        // The picker's agents and models, written beside the picture as x2-2-menu.txt.
-        if let gallery {
-            let agents = model.entries.map { "  \($0.title)\($0.checked ? "  ✓" : "")" }
-            let shown = model.modelChoice, models = ["MODEL"] + shown.rows.map { "  \($0.name)\(shown.isChosen($0) ? "  ✓" : "")" }
-            try (["BUILDS THIS SPACE"] + agents + models).joined(separator: "\n").appending("\n")
-                .write(to: gallery.appendingPathComponent("x2-2-menu.txt"), atomically: true, encoding: .utf8)
-        }
-    }
-
     /// X2.4, the hints, each once: your assistant's by the sticker when the space a build made opens ("Got It", gone
     /// once the card opens); at the next opening, Info's under the title (gone as Info opens); then Point's under its
     /// button (gone once pointing starts). None comes again, and someone who never built a space gets none.
@@ -905,9 +884,51 @@ struct AcceptanceBuild {
         #expect(Schemas.ease(0, 0.8, 0.9) == 0 && Schemas.ease(.infinity, 3, 0.8) == 1 && Schemas.ease(3.4, 3, 0.8) > 0.5)
     }
 
-    @Test("f1-2: Beat 2: a tile redraws the schema, the tag In iTerm", .disabled("not built yet: S8")) func f1_2() async throws {}
-    @Test("f1-3: Beat 3: ≠, three chips, no Full Access rung here", .disabled("not built yet: S8")) func f1_3() async throws {}
-    @Test("f1-4: Beat 4: Settings' map, the real window, the two powers", .disabled("not built yet: S8")) func f1_4() async throws {}
+    /// F1.2, the second beat: the programs found, all six, the first looked at. A tile redraws the schema: its program,
+    /// its path, its home folder. The conversations are not counted: the drawing says they stay with the program.
+    @Test("f1-2: Beat 2: a tile redraws the schema, the tag In iTerm") func f1_2() async throws {
+        let scene = try await Self.welcome()
+        defer { scene.remove() }
+        scene.model.locate = { .success("/Users/example/bin/\($0)") }
+        scene.model.find(["claude", "codex"])
+        #expect(await wait(until: { scene.model.paths.count == 2 }))
+        scene.model.go(1)
+        #expect(scene.assistant.entries.count == 6 && Registry.app.agent("codex")?.home == "~/.codex")
+        func label(_ name: String, _ home: String, _ kind: String) -> String {
+            "An agent is one conversation, here in iTerm, with \(name): the program at /Users/example/bin/\(kind), its home folder \(home), your project folders. something sees them all and changes nothing."
+        }
+        let tiles = ["Programs on this Mac   6"] + Registry.app.builders.map(\.name)
+        try await scene.draw("f1-2") { words in
+            #expect(words == Self.beatWords(.agent, schema: tiles + [label("Claude Code", "~/.claude", "claude"), "Antigravity, Cursor: something sees them, and can’t start them."], back: true), "\(words)")
+        }
+        scene.model.look = "codex"
+        let words = await Self.read(try #require(scene.window.contentView?.subviews.first), whole: true)
+        #expect(words.contains(label("Codex", "~/.codex", "codex")), "\(words)")
+    }
+
+    /// F1.3, the third beat: both roles joined by ≠, the assistant's chips (today's chip until the three land), the line
+    /// about folders.
+    @Test("f1-3: Beat 3: ≠, three chips, no Full Access rung here") func f1_3() async throws {
+        let scene = try await Self.welcome()
+        defer { scene.remove() }
+        for _ in 0..<2 { scene.model.go(1) }
+        try await scene.draw("f1-3") { words in
+            for line in ["Your assistant", "Agents a space shows", "They live on your Mac. A space only shows them.", "An agent with a job: it builds a space. Each space has its own.",
+                         "is not the same as", AgentModelChip.label(scene.assistant), "Your assistant’s folder gives a space nothing."] { #expect(words.contains(line), "\(line) in \(words)") }
+        }
+    }
+
+    /// F1.4, the fourth beat: one image for VoiceOver, the same map as Settings, the programs that never ask named.
+    @Test("f1-4: Beat 4: Settings' map, the real window, the two powers") func f1_4() async throws {
+        let scene = try await Self.welcome()
+        defer { scene.remove() }
+        for _ in 0..<3 { scene.model.go(1) }
+        #expect(Schemas.neverAsk == ["pi", "OMP", "Amp"] && WelcomeModel.Beat.answer.sentence.contains("except pi, OMP and Amp, which never ask"))
+        try await scene.draw("f1-4") { words in
+            #expect(words == Self.beatWords(.answer, schema: [AnswerSchema.label], back: true), "\(words)")
+        }
+    }
+
     /// F1.5, the last beat: the title above the whole Hero, which now speaks, Back, the sentence that nothing starts, and
     /// the two doors. → stays here.
     @Test("f1-5: Beat 5: \"Ready to build something today?\", the whole Hero, two doors") func f1_5() async throws {
@@ -949,7 +970,31 @@ struct AcceptanceBuild {
     }
     @Test("f1-7: Five bubbles, once each, no counter", .disabled("not built yet: S9")) func f1_7() async throws {}
     @Test("f1-8: Open an Example: My agents, nothing started, no sheet", .disabled("not built yet: S9")) func f1_8() async throws {}
-    @Test("f1-9: No program found: beats 2, 3 and 5, Look Again", .disabled("not built yet: S8")) func f1_9() async throws {}
+    /// F1.9, no program: beat 2 says so with Look Again and the install commands, in dashes; beat 3 says "an agent you
+    /// install"; beat 5 keeps the example and offers Look Again.
+    @Test("f1-9: No program found: beats 2, 3 and 5, Look Again") func f1_9() async throws {
+        let stage = try Stage("build")
+        let (home, model) = try AssistantTests().assistant([], prefix: "something-accept-build-")
+        defer { stage.remove(); home.remove() }
+        model.engine.lookAgain()
+        #expect(await wait(until: { model.noAgent }))
+        let welcome = WelcomeModel(places: home.places)
+        welcome.go(1)
+        let window = Welcome.window(welcome, assistant: model, motion: .reduced)
+        defer { window.close() }
+        try await stage.appearances { suffix in
+            try await Picture.alone(window, "f1-9" + suffix, root: home.root)
+            let words = await Self.read(try #require(window.contentView?.subviews.first), whole: true)
+            for line in ["No coding program found on this Mac yet", "Look Again", "No program yet. something sees them all and changes nothing.",
+                         "Install one in Terminal, with your own account. something never installs one for you."] { #expect(words.contains(line), "\(line) in \(words)") }
+        }
+        welcome.go(1)
+        var words = await Self.read(try #require(window.contentView?.subviews.first), whole: true)
+        #expect(words.contains("An agent you install, with a job: it builds a space. Each space has its own."), "\(words)")
+        for _ in 0..<2 { welcome.go(1) }
+        words = await Self.read(try #require(window.contentView?.subviews.first), whole: true)
+        #expect(words.suffix(3) == ["No agent starts, nothing is spent.", "Open an Example", "Look Again"], "\(words)")
+    }
     @Test("f1-10: Help › How something Works: four schemas, one button each", .disabled("not built yet: S9")) func f1_10() async throws {}
     @Test("r2-1: Up to three questions, one agent turn", .disabled("not built yet: C7")) func r2_1() async throws {}
     @Test("r2-2: Build Now skips them", .disabled("not built yet: C7")) func r2_2() async throws {}

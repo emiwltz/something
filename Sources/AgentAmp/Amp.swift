@@ -9,5 +9,5 @@ extension AgentDescriptor {
     /// something sets. As a builder, it is lent something's commands over MCP, which it calls from its code_exec tool.
     package static let amp = AgentDescriptor(kind: "amp", name: "Amp", install: "brew install ampcode/tap/ampcode", driving: .amp,
                                              reader: { _ in OtherReader(kind: "amp", names: ["amp"]) },
-                                             builder: Builder(lent: LentTool.all), neverAsks: true, monogram: "A")
+                                             builder: Builder(lent: LentTool.all), neverAsks: true, home: "~/.config/amp", monogram: "A")
 }

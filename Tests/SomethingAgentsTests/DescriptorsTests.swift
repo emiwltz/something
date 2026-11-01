@@ -27,6 +27,7 @@ import SomethingCore
         #expect(Programs(environment: [:], registry: .described).homeFolders == [".local/bin", ".bun/bin", ".opencode/bin", ".volta/bin"])
         #expect(Dictionary(uniqueKeysWithValues: Registry.described.agents.filter { !$0.asksAsMuch.isEmpty }.map { ($0.kind, $0.asksAsMuch) }) == ["claude": ["default", "plan"], "codex": ["on-request", "untrusted"], "opencode": ["build", "plan"], "omp": ["default", "plan"]])
         #expect(Registry.described.resumable == ["claude", "codex"])
+        #expect(Registry.described.agents.filter { $0.builder != nil }.allSatisfy { $0.home?.hasPrefix("~/") == true })
         #expect(Registry.described.others.keys.sorted() == ["auggie", "copilot", "crush", "droid", "dsh", "gemini", "goose", "qwen", "zcode"])
         // The core's contract 1 list is the floor; amp is launched beyond it, and antigravity and cursor are only seen.
         #expect(Registry.described.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp", "amp"] && Registry.described.kinds.readOnly == ["antigravity", "cursor"])
