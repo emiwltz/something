@@ -57,6 +57,7 @@ struct AcceptanceAgents {
         info.refresh()
         #expect(shell.agentsShown.count == 3 && shell.agentsShown.eyes == .wait, "the panel's button: \(shell.agentsShown)")
         #expect(shell.controls[Shell.info]?.accessibilityLabel() == "Your agents: 3. Open the panel")
+        #expect((shell.controls[Shell.info] as? AgentsButton)?.attributedTitle.string.hasSuffix("3") == true, "the count on the button")
         let read = await AccessibilityTests.walk(shell.inspector.viewController.view) { $0.contains("Look Again") }
         #expect(read.unnamed.isEmpty, "\(read.unnamed)")
         for words in ["This space: Agents", "Close the panel", "What it may do", "Which agents it shows", "This Space Sees, 3", "Others on This Mac, 8", "Look Again"] {

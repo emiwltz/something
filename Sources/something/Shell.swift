@@ -328,7 +328,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             let wide = button.widthAnchor.constraint(equalToConstant: width)
             NSLayoutConstraint.activate([button.heightAnchor.constraint(equalToConstant: 28 * k), wide])
             (button as? AgentsButton)?.wide = wide
-            (button as? AgentsButton)?.show(count: 0, eyes: .listen)
+            (button as? AgentsButton)?.show(count: agentsShown.count, eyes: agentsShown.eyes)
             // The image and action serve the overflow menu, where the toolbar puts an item without its view.
             (item.view, item.label, item.isBordered, item.autovalidates, item.image, item.action) = (button, label, false, false, button.image, action)
             return item
@@ -407,6 +407,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// header's button draws both.
     func agents(count: Int, eyes: Sign.State) {
         agentsShown = (count, eyes)
+        (controls[Shell.info] as? AgentsButton)?.show(count: count, eyes: eyes)
         controls[Shell.info]?.setAccessibilityLabel("Your agents: \(count). Open the panel")
     }
 
