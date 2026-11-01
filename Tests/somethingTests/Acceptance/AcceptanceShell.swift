@@ -1336,6 +1336,116 @@ struct AcceptanceShell {
         #expect(shell.band.strip == nil && pill.window === shell.window && shell.controls[Shell.full]?.isHidden == true)
     }
 
+    /// The band's colour, from its own drawing: the middle of its upper half, in sRGB.
+    static func bandColour(_ shell: Shell) throws -> NSColor {
+        shell.band.layoutSubtreeIfNeeded()
+        let rep = try #require(shell.band.bitmapImageRepForCachingDisplay(in: shell.band.bounds))
+        shell.band.cacheDisplay(in: shell.band.bounds, to: rep)
+        return try #require(rep.colorAt(x: rep.pixelsWide / 2, y: rep.pixelsHigh / 4)?.usingColorSpace(.sRGB))
+    }
+
+    /// The band over light and dark pages, day and night: it follows the page and the appearance, by its pixels; it reads
+    /// again at a rest, a change of width and a change of appearance; a picture late for its space is dropped; a space that
+    /// shows no page takes it off.
+    @Test func theBandWearsThePageItIsOver() async throws {
+        let stage = try Stage("shell-band")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        func page(_ colour: String) -> String { "<!doctype html><title>\(colour)</title><meta name=\"something\" content='{\"contract\":1}'><body style=\"margin:0;background:\(colour)\">" }
+        for name in ["pale", "dark-one", "red", "blue"] {
+            _ = try stage.home.space(name, page(["pale": "#ffffff", "dark-one": "#000000", "red": "#ff0000", "blue": "#0000ff"][name] ?? ""))
+        }
+        library.relist()
+        var seen: [String: CGFloat] = [:]
+        for name in ["pale", "dark-one"] {
+            let view = try await stage.open(name, in: shell, library)
+            defer { view.close() }
+            try await Stage.alone {
+                for dark in [false, true] {
+                    NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                    view.web.appearance = NSApp.appearance
+                    shell.band.appearance = NSApp.appearance
+                    #expect(await wait(until: { shell.band.strip != nil }))
+                    seen[name + (dark ? "-night" : "-day")] = try Self.bandColour(shell).brightnessComponent
+                }
+            }
+        }
+        let tone = { (key: String) in seen[key] ?? -1 }
+        #expect(tone("pale-day") > tone("dark-one-day") && tone("pale-night") > tone("dark-one-night"), "\(seen)")
+        #expect(tone("pale-day") > tone("pale-night") && tone("dark-one-day") > tone("dark-one-night"), "\(seen)")
+        // A rest, a change of width, an appearance: each reads again.
+        let red = try await stage.open("red", in: shell, library)
+        var colour = try Self.bandColour(shell)
+        #expect(await wait(until: { (try? Self.bandColour(shell).redComponent) ?? 0 > (try? Self.bandColour(shell).blueComponent) ?? 1 }), "\(colour)")
+        var reads = shell.band.reads
+        red.rested()
+        #expect(await wait(until: { shell.band.reads > reads }))
+        reads = shell.band.reads
+        shell.window.setContentSize(NSSize(width: 1000, height: 700))
+        #expect(await wait(until: { shell.band.reads > reads }))
+        reads = shell.band.reads
+        shell.band.changed()
+        #expect(await wait(until: { shell.band.reads > reads }))
+        // A picture late for the space it was taken of goes nowhere.
+        shell.readPage()
+        red.close()
+        let blue = try await stage.open("blue", in: shell, library)
+        defer { blue.close() }
+        #expect(await wait(until: { (try? Self.bandColour(shell).blueComponent) ?? 0 > (try? Self.bandColour(shell).redComponent) ?? 1 }))
+        colour = try Self.bandColour(shell)
+        #expect(colour.blueComponent > colour.redComponent, "\(colour)")
+        library.select(.newSpace)
+        shell.show(nil)
+        #expect(shell.band.strip == nil)
+    }
+
+    /// The pill answers a press that began on it, by the mouse or VoiceOver; the end of a click that began elsewhere is
+    /// not its own, or the click closing the palette would open it again.
+    @Test func thePillOpensOnlyOnItsOwnPress() async throws {
+        let stage = try Stage("shell-pill")
+        defer { stage.remove() }
+        let (shell, _, _) = stage.window()
+        final class Catcher: NSObject {
+            var count = 0
+            @objc func showPalette(_ sender: Any?) { count += 1 }
+        }
+        let catcher = Catcher(), pill = shell.jump
+        pill.target = catcher
+        pill.layoutSubtreeIfNeeded()
+        let up = try #require(NSEvent.mouseEvent(with: .leftMouseUp, location: pill.convert(NSPoint(x: 20, y: 10), to: nil), modifierFlags: [], timestamp: 0,
+                                                 windowNumber: shell.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0))
+        pill.mouseUp(with: up)
+        #expect(catcher.count == 0, "an end alone")
+        pill.mouseDown(with: up)
+        pill.mouseUp(with: up)
+        #expect(catcher.count == 1)
+        #expect(pill.accessibilityPerformPress() && catcher.count == 2)
+    }
+
+    /// The narrowest window at the largest size, Full Access on, a long title and a count: nothing leaves the toolbar, the
+    /// title stops before the pill, and the pill stays in the middle.
+    @Test func theHeaderHoldsAtItsNarrowest() async throws {
+        let stage = try Stage("shell-narrow")
+        defer { stage.remove() }
+        try await Stage.alone {
+            let (shell, _, _) = stage.window()
+            let size = Look.scale.size
+            Look.scale.size = .larger
+            defer { Look.scale.size = size }
+            shell.fullAccess(true)
+            (shell.controls[Shell.info] as? AgentsButton)?.show(count: 12, eyes: .listen)
+            shell.heading("A morning brief with every feed, newsletter and calendar I read before work starts", "", space: true)
+            shell.window.setContentSize(shell.window.contentMinSize)
+            let full = try #require(shell.controls[Shell.full]), width = shell.window.frame.width, pill = shell.jump
+            let holds = {
+                shell.window.contentView?.superview?.layoutSubtreeIfNeeded()
+                return full.window != nil && pill.window != nil && full.convert(full.bounds, to: nil).maxX <= width
+                    && shell.titleLine.convert(shell.titleLine.bounds, to: nil).maxX <= pill.convert(pill.bounds, to: nil).minX
+            }
+            #expect(await wait(until: holds), "\(pill.convert(pill.bounds, to: nil)), \(full.convert(full.bounds, to: nil))")
+        }
+    }
+
     /// The sidebar by the edge or ⌃⌘S (R4.2): at rest the page has the window; a strip at the left edge under the
     /// toolbar, no control for VoiceOver; the pointer resting there shows a mark, and 200 ms later, or at a click, the
     /// sidebar comes over the page, 250 wide, 10 from the edges, in glass. It leaves 0.32 s after the pointer, never

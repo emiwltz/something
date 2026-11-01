@@ -324,6 +324,22 @@ enum Picture {
         }
         // SwiftUI and WebKit draw on the run loop.
         await wait(1.5)
+        // WebKit hands a page the window's appearance on its own time, after the window: wait until the page wears the
+        // picture's, or a day picture shows the page in the Mac's night (or the reverse).
+        if let web, web.superview != nil, web.url != nil {
+            let dark = (page ?? NSApp.appearance ?? web.effectiveAppearance).bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            if NSApp.appearance != nil { web.appearance = page ?? NSApp.appearance }
+            for _ in 0..<50 {
+                if (try? await web.evaluateJavaScript("matchMedia('(prefers-color-scheme: dark)').matches")) as? Bool == dark { break }
+                _ = await wait(0.1)
+            }
+        }
+        // The band read the page before it changed its colours, or is about to: it reads it as it is now.
+        if web?.superview != nil, (web?.navigationDelegate as? SpaceView)?.frame != nil {
+            let reads = shell.band.reads
+            shell.readPage()
+            _ = await wait(until: { shell.band.reads > reads })
+        }
         let frame = try #require(shell.window.contentView?.superview)
         disguise(frame, root.path)
         frame.layoutSubtreeIfNeeded()
@@ -350,16 +366,6 @@ enum Picture {
             let script = "(() => { const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); "
                 + "for (let node; (node = walk.nextNode());) if (node.data.includes(root)) node.data = node.data.split(root).join('/Users/example'); return 0; })()"
             _ = try? await web.callAsyncJavaScript("return \(script)", arguments: ["root": root.path], in: frame, contentWorld: .page)
-        }
-        // WebKit hands a page the window's appearance on its own time, after the window: wait until the page wears the
-        // picture's, or a day picture shows the page in the Mac's night (or the reverse).
-        if let web, web.superview != nil, web.url != nil {
-            let dark = (page ?? NSApp.appearance ?? web.effectiveAppearance).bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            if NSApp.appearance != nil { web.appearance = page ?? NSApp.appearance }
-            for _ in 0..<50 {
-                if (try? await web.evaluateJavaScript("matchMedia('(prefers-color-scheme: dark)').matches")) as? Bool == dark { break }
-                _ = await wait(0.1)
-            }
         }
         // A page not loaded yet (a space arriving, its rights not asked) has nothing to take: its area is drawn empty.
         let snapshot = web?.superview == nil || web?.url == nil ? nil : try await web?.takeSnapshot(configuration: nil)

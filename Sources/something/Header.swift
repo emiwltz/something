@@ -9,12 +9,15 @@ import WebKit
 /// The band behind the toolbar, across the window, with its lower edge. It takes no click: the toolbar has them. The
 /// strip is nil off a space: the tint then lies on the window's background.
 final class HeaderBand: NSView {
-    /// How much of the page's top the picture holds, and how wide it is taken: the stretch is the blur.
+    /// How much of the page's top the picture holds, more than a thin rule at its edge, and how wide it is taken: the
+    /// stretch is the blur.
     static let rows: CGFloat = 12, wide: CGFloat = 64
     private static let saturate = CIContext(options: [.useSoftwareRenderer: true, .cacheIntermediates: false])
 
     /// The page's top rows, saturated.
     private(set) var strip: NSImage?
+    /// How many times it took a picture, or took one off.
+    private(set) var reads = 0
     /// Whether it lies over the page, as Page Full Screen brings it back: it then casts the mockup's soft shadow.
     var over = false {
         didSet { layer?.shadowOpacity = over ? 0.35 : 0 }
@@ -38,6 +41,7 @@ final class HeaderBand: NSView {
     /// Wears `image`, the page's top rows as they are; nil takes the picture off.
     func wear(_ image: NSImage?) {
         strip = image.flatMap(HeaderBand.saturated)
+        reads += 1
         needsDisplay = true
     }
 
@@ -81,7 +85,7 @@ final class HeaderBand: NSView {
         }
         Look.Token.side.color.withAlphaComponent(night ? 0.74 : 0.72).setFill()
         bounds.fill(using: .sourceOver)
-        Look.Token.ink.color.withAlphaComponent(0.16).setFill()
+        Look.Token.line2.color.setFill()
         NSRect(x: 0, y: 0, width: bounds.width, height: 1).fill(using: .sourceOver)
     }
 
@@ -89,13 +93,15 @@ final class HeaderBand: NSView {
 }
 
 /// The header's middle: a button that opens ⌘P, drawn like a field. What waits while the sidebar is closed comes as a
-/// yellow dot and a count, a small pop when it grows. ⌘P's Needs You is the palette's.
+/// yellow dot and a count, a small pop when it grows. ⌘P's Needs You is the palette's. ⌘P is the keyboard's way to it,
+/// so it takes no focus of its own.
 final class JumpPill: NSControl {
     static let words = "Jump to a space or an action"
     /// Its width, in a window with room and in a narrow one.
     static func width(narrow: Bool) -> CGFloat { (narrow ? 176 : 296) * Look.scale.size.factor }
 
     private let count = WaitMark()
+    private var armed = false
     private var lit = false {
         didSet { needsDisplay = true }
     }
@@ -119,9 +125,9 @@ final class JumpPill: NSControl {
 
     required init?(coder: NSCoder) { nil }
 
-    /// Takes the width for a window that is `narrow` or not, at the interface size.
-    func fit(narrow: Bool) {
-        (wide.constant, high.constant) = (JumpPill.width(narrow: narrow), 28 * Look.scale.size.factor)
+    /// Takes `width`, and its height at the interface size.
+    func fit(width: CGFloat) {
+        (wide.constant, high.constant) = (width, 28 * Look.scale.size.factor)
         needsLayout = true
         needsDisplay = true
     }
@@ -144,7 +150,8 @@ final class JumpPill: NSControl {
     private var key: NSAttributedString {
         NSAttributedString(string: Keys.shown("palette"), attributes: [.font: Look.font(.ui, size: 10.5, weight: .medium), .foregroundColor: tone])
     }
-    /// The grey of the field's words, ink at less strength, as everything on the glass; under the pointer, one deeper.
+    /// The grey of the field's words, the mockup's: ink at less strength; under the pointer, one deeper. Over a black
+    /// page, by day, that is about 3.7 to 1.
     private var tone: NSColor { Look.Token.ink.color.withAlphaComponent(lit ? 0.76 : 0.62) }
 
     override func layout() {
@@ -157,7 +164,7 @@ final class JumpPill: NSControl {
         let k = Look.scale.size.factor, shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 8, yRadius: 8)
         Look.Token.ink.color.withAlphaComponent(0.06).setFill()
         shape.fill()
-        (lit ? tone : Look.Token.ink.color.withAlphaComponent(0.16)).setStroke()
+        (lit ? tone : Look.Token.line2.color).setStroke()
         shape.stroke()
         let glass = NSImage.symbol("magnifyingglass", 11 * k, .medium).tinted(tone)
         glass.draw(in: NSRect(x: 10 * k, y: (bounds.height - glass.size.height) / 2, width: glass.size.width, height: glass.size.height))
@@ -179,9 +186,11 @@ final class JumpPill: NSControl {
     override func mouseExited(with event: NSEvent) { lit = false }
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func mouseDown(with event: NSEvent) {}
+    // Only a press that began here: the click that closes the palette ends over the pill too.
+    override func mouseDown(with event: NSEvent) { armed = true }
     override func mouseUp(with event: NSEvent) {
-        if bounds.contains(convert(event.locationInWindow, from: nil)) { sendAction(action, to: target) }
+        defer { armed = false }
+        if armed, bounds.contains(convert(event.locationInWindow, from: nil)) { sendAction(action, to: target) }
     }
     override func accessibilityPerformPress() -> Bool { sendAction(action, to: target) }
 }
@@ -224,17 +233,16 @@ private final class WaitMark: NSView {
 }
 
 /// The panel's button: the mini eyes, still (a live sign in a toolbar is a display link per window, for a small mark),
-/// and the count when there is one. `show` is what `Shell.agents(count:eyes:)` calls.
+/// and the count when there is one.
 final class AgentsButton: ToolButton {
-    private var count = 0
+    private var count = 0, eyes = Sign.State.listen, label: String?
+    /// Its width, the mockup's padding around what it holds.
+    var wide: NSLayoutConstraint?
 
     /// Says how many agents the open space sees, and in what eyes.
     func show(count: Int, eyes: Sign.State) {
-        self.count = count
-        let size = Look.scale.size.factor, picture = Sign.miniEyes(eyes)
-        picture.size = NSSize(width: 16 * size, height: 10 * size)
-        picture.accessibilityDescription = image?.accessibilityDescription
-        image = picture
+        label = label ?? image?.accessibilityDescription
+        (self.count, self.eyes) = (count, eyes)
         write()
     }
 
@@ -244,19 +252,25 @@ final class AgentsButton: ToolButton {
 
     /// The count in the button's tone, and the width the mockup's padding leaves it: 34 points at least.
     private func write() {
-        let k = Look.scale.size.factor, font = Look.font(.ui, size: 12, weight: .semibold)
+        let k = Look.scale.size.factor, font = Look.font(.ui, size: 12, weight: .semibold), picture = Sign.miniEyes(eyes)
+        picture.size = NSSize(width: 16 * k, height: 10 * k)
+        picture.accessibilityDescription = label
+        image = picture
         (imagePosition, imageHugsTitle) = (count > 0 ? .imageLeading : .imageOnly, true)
         attributedTitle = NSAttributedString(string: count > 0 ? " \(count)" : "", attributes: [.font: font, .foregroundColor: contentTintColor ?? Look.Token.ink2.color])
         let number = count > 0 ? 6 * k + ceil("\(count)".size(withAttributes: [.font: font]).width) : 0
-        constraints.first { $0.firstAttribute == .width }?.constant = max(34 * k, 8 * k + 16 * k + number + 8 * k)
+        wide?.constant = max(34 * k, 8 * k + 16 * k + number + 8 * k)
     }
 }
 
 extension Shell {
-    /// The band takes the page's top rows, nil off a page. Later pictures win; one that comes after the space changed
-    /// is dropped.
+    /// The band takes the page's top rows, none for a space that shows none. A picture that comes after the space
+    /// changed is dropped.
     func readPage() {
-        guard let web = page as? WKWebView, web.url != nil, !web.bounds.isEmpty else { return band.wear(nil) }
+        guard let view = space, view.blocked.isEmpty, !view.stopped else { return band.wear(nil) }
+        // Nothing painted yet: the page's first rest brings the picture, and until then the band keeps the last one.
+        let web = view.web
+        guard view.frame != nil, !web.bounds.isEmpty else { return }
         let config = WKSnapshotConfiguration(), shown = space
         config.rect = NSRect(x: 0, y: 0, width: web.bounds.width, height: HeaderBand.rows)
         config.snapshotWidth = NSNumber(value: Double(HeaderBand.wide))
@@ -276,11 +290,15 @@ extension Shell {
         band.over = pageFull
     }
 
-    /// The pill's width, and what a long title leaves on its right: the tools, and the pill, which sits in the middle.
+    /// The pill's width, and what a long title leaves on its right: the pill in the middle, and the tools after it,
+    /// which at the narrowest may need more than the window's right half.
     func fitHeader() {
         let narrow = window.frame.width < Shell.narrow * Look.scale.size.factor
-        jump.fit(narrow: narrow)
-        titleLine.reserve = max(toolsWidth, (window.frame.width + JumpPill.width(narrow: narrow)) / 2 + 12)
+        let tools = (toolsRow?.fittingSize.width ?? 0) + 24, lead = 150 * Look.scale.size.factor
+        // At the largest size, Full Access on, the narrowest window has no room for the words: the pill gives them up.
+        let pill = max(min(JumpPill.width(narrow: narrow), window.frame.width - lead - tools - 32), 64)
+        jump.fit(width: pill)
+        titleLine.room = window.frame.width - lead - max((window.frame.width + pill) / 2 + 12, pill + tools + 24)
     }
 
     /// What the pill says waits: nothing while the sidebar shows, whose Needs You says it.

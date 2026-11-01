@@ -187,5 +187,6 @@ extension Shell {
         library.preferences.fullAccess = on
         assistant.fullAccess = on
         fullMark.isHidden = !on
+        fitHeader()
     }
 }

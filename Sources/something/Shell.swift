@@ -6,7 +6,8 @@
 // Change leaves its frames at work, QuickFrame.swift, and an answer without a change in a note, MarginNote.swift), the
 // panel's button (pressed while it shows) and Page Full Screen (PageFull.swift); before them, while Full Access is on,
 // its orange mark, which turns it off (Rules.swift). Off the spaces only the name and the pill show. Reload is in the
-// View menu. Its backgrounds are the identity's: no vibrancy lets the desktop through. The center holds the open space's web view edge to edge under the toolbar, what
+// View menu. Its backgrounds are the identity's: no vibrancy lets the desktop through. The center holds the open space's
+// web view edge to edge under the toolbar, what
 // keeps a space from being shown, New Space or the templates; over a space, the glass, which holds the assistant
 // (Glass.swift). Off the spaces the assistant is away: New Space has its own field. While the welcome is open, the
 // window is out of sight; it arrives once it ends. In full screen the space is alone: the system hides the toolbar and
@@ -57,8 +58,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     private(set) var controls: [NSToolbarItem.Identifier: NSButton] = [:]
     /// How many agents the open space's page sees and what their eyes say with its assistant's: the panel button's.
     private(set) var agentsShown = (count: 0, eyes: Sign.State.listen)
-    /// The room the group of tools takes, with the gap before it.
-    private(set) var toolsWidth: CGFloat = 0
+    /// The group of tools, measured for the title's room.
+    private(set) var toolsRow: NSStackView?
     /// The space's name, which opens Info.
     let titleLine = TitleLine()
     /// Full Access's mark, hidden while it is off.
@@ -83,7 +84,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     var bar: CGFloat = 52
     /// The left edge's top: under the toolbar, or the window's top in Page Full Screen.
     var leftTop: (under: NSLayoutConstraint, top: NSLayoutConstraint)?
-    /// What holds the top of what the center shows: the toolbar's lower edge, or in full screen the window's top.
+    /// What holds the top of what the center shows: the header's lower edge, or in full screen the window's top.
     var top: NSLayoutConstraint?
 
     /// A window under this width has no room for a docked sidebar.
@@ -170,7 +171,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         NSLayoutConstraint.activate([band.topAnchor.constraint(equalTo: chrome.topAnchor), band.leadingAnchor.constraint(equalTo: chrome.leadingAnchor),
                                      band.trailingAnchor.constraint(equalTo: chrome.trailingAnchor),
                                      band.bottomAnchor.constraint(equalTo: chrome.safeAreaLayoutGuide.topAnchor)])
-        band.changed = { [weak self] in self?.readPage() }
+        band.changed = { [weak self] in self?.readPageSoon() }
         jump.motion = { [weak library] in library?.preferences.motion ?? .calm }
         edges()
         drawer.busy = { [weak self] in self?.holdsDrawer ?? false }
@@ -306,7 +307,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(toolbar) }
 
-    /// The mockup's toolbar items: plain icons in `ink2`, with the words of its tooltips and the keys of the command
+    /// The mockup's toolbar items: plain icons in the glass's grey, with the words of its tooltips and the keys of the command
     /// table.
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
         func item(_ id: NSToolbarItem.Identifier, _ label: String, _ symbol: String, _ tip: String, _ action: Selector?, words: String? = nil) -> NSToolbarItem {
@@ -324,7 +325,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
                 (button.title, button.imagePosition, button.imageHugsTitle, button.font) = (" " + words, .imageLeading, true, font)
                 width = (9 + 13 + 6 + 9) * k + ceil(words.size(withAttributes: [.font: font]).width)
             }
-            NSLayoutConstraint.activate([button.heightAnchor.constraint(equalToConstant: 28 * k), button.widthAnchor.constraint(equalToConstant: width)])
+            let wide = button.widthAnchor.constraint(equalToConstant: width)
+            NSLayoutConstraint.activate([button.heightAnchor.constraint(equalToConstant: 28 * k), wide])
+            (button as? AgentsButton)?.wide = wide
             (button as? AgentsButton)?.show(count: 0, eyes: .listen)
             // The image and action serve the overflow menu, where the toolbar puts an item without its view.
             (item.view, item.label, item.isBordered, item.autovalidates, item.image, item.action) = (button, label, false, false, button.image, action)
@@ -337,7 +340,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             return item
         case Shell.middle:
             let item = NSToolbarItem(itemIdentifier: id)
-            (item.view, item.isBordered, item.label) = (jump, false, JumpPill.words)
+            // The image and action serve the overflow menu, as the tools' do.
+            (item.view, item.isBordered, item.label, item.image, item.action) = (jump, false, JumpPill.words, NSImage.symbol("magnifyingglass", 13, .regular), jump.action)
             return item
         // The system's own sidebar item would sit by the traffic lights, in a capsule.
         case Shell.sidebar:
@@ -359,7 +363,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             fullMark.isHidden = !library.preferences.fullAccess
             // The mockup's toolbar ends 10 points from the window's edge; the toolbar keeps 8.
             row.edgeInsets.right = 2
-            toolsWidth = row.fittingSize.width + 24
+            toolsRow = row
             fitHeader()
             let group = NSToolbarItemGroup(itemIdentifier: id)
             (group.subitems, group.view, group.isBordered, group.autovalidates) = (tools, row, false, false)
@@ -379,7 +383,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     /// Writes the name in the toolbar, alone, for the window menu and VoiceOver too (`subtitle` only for the window's
     /// own, which nothing draws), and shows what acts on a space only while one is open: off the spaces, the toolbar
-    /// holds the name alone. Point is greyed when `point` is false: the page stopped.
+    /// holds the name and the pill. Point is greyed when `point` is false: the page stopped.
     func heading(_ title: String, _ subtitle: String, space: Bool, point: Bool = true) {
         (window.title, window.subtitle) = (title, subtitle)
         titleLine.line = NSAttributedString(string: title, attributes: [.font: Look.font(.ui, size: 13.5, weight: .semibold),
@@ -758,15 +762,14 @@ final class TitleLine: NSView {
         didSet { needsDisplay = true }
     }
 
-    /// What the tools need on its right, with the gap before them: the toolbar would rather move them to its overflow
-    /// menu than narrow a view that asks for more.
-    var reserve: CGFloat = 0 {
+    /// How wide it may be: what the pill and the tools leave it. Told, not read from where it sits: once the toolbar has
+    /// moved it to its overflow menu it sits nowhere, and would ask for its whole line and stay there.
+    var room: CGFloat = .greatestFiniteMagnitude {
         didSet { invalidateIntrinsicContentSize() }
     }
 
     override var intrinsicContentSize: NSSize {
         let whole = ceil(line.size().width) + TitleLine.indent + (space ? TitleLine.trail : 0)
-        let room = window.map { $0.frame.width - convert(NSPoint.zero, to: nil).x - reserve } ?? whole
         return NSSize(width: max(TitleLine.indent, min(whole, room)), height: max(ceil(line.size().height), space ? TitleLine.chip : 0))
     }
     override func draw(_ dirtyRect: NSRect) {

@@ -304,8 +304,9 @@ extension Shell {
     /// say so.
     func drawerMoved() {
         let state = drawer.state
-        column.constant = state.dock ? Drawer.column : 0
-        readPageSoon()
+        let room = state.dock ? Drawer.column : 0
+        if column.constant != room { readPageSoon() }
+        column.constant = room
         (library.sidebar.kept, library.sidebar.room) = (state.kept, state.room)
         reveals()
         let button = toolbarItems.first { $0.itemIdentifier == Shell.sidebar }?.view as? ToolButton, words = state.shown ? "Hide Sidebar" : "Show Sidebar"

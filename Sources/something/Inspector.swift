@@ -418,8 +418,6 @@ struct InspectorView: View {
             if let space = info.space {
                 let title = title(space)
                 VStack(spacing: 0) {
-                    // The toolbar's lower edge goes on over the panel.
-                    Rectangle().fill(Look.Token.line.ui).frame(height: 1)
                     top
                     switch info.content {
                     case .agents: AgentsPanel(info: info, assistant: assistant, title: title, motion: library.preferences.motion)
