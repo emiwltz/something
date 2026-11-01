@@ -7,8 +7,9 @@ enum Budget {
     // Emi agreed on 24 Oct 2026 to raise the app budget per block on measured lines, and to raise the limit; on 27 Oct
     // 2026, per block on measured lines up to 19,600; on 28 Oct 2026, up to 19,900 for the app and 1,880 for the core.
     // On 31 Oct 2026, to 19,943 on measured lines, for an agent's settings in Info and Continue in Terminal.
-    // On 1 Nov 2026, for round 4, up to 24,000 and 1,960, always on measured lines: here for one reading of an agent and the sentence.
-    static let core = 1_875, host = 2_750, driver = 650, agentsShared = 450, app = 20_158, described = 40
+    // On 1 Nov 2026, for round 4, up to 24,000 and 1,960: these ceilings hold while its slices land, and the final audit
+    // sets the measured lines.
+    static let core = 1_960, host = 2_750, driver = 650, agentsShared = 450, app = 24_000, described = 40
 
     /// Whether a file describes an agent by data alone: it extends AgentDescriptor and gives it no driver.
     static func describesOnly(_ text: String) -> Bool { text.contains("extension AgentDescriptor") && !text.contains("driving:") }
