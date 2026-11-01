@@ -62,7 +62,7 @@ func page(_ declaration: String?, _ body: String) -> String {
 final class FakeAsk: Asking {
     var questions: [RightsQuestion] = [], links: [URL] = [], modes: [String] = [], told: [String] = []
     /// nil answers "Don't Allow"; otherwise the level and Run's folder. By default the level pre-set, as Allow does.
-    var answer: ((RightsQuestion) -> RightsAnswer?)? = { RightsAnswer(level: $0.level, folder: $0.folder) }
+    var answer: ((RightsQuestion) -> LevelChoice?)? = { LevelChoice(level: $0.level, folder: $0.folder.map { .path($0) } ?? .none) }
     /// The link sheet's answer: nil when it could not be shown.
     var link: Bool? = false
     /// Runs while the link window would be open.
@@ -73,7 +73,7 @@ final class FakeAsk: Asking {
     /// The folder the folder panel chooses, nil cancels; and what each one said it was for.
     var folder: URL?, folderMessages: [String] = []
 
-    func rights(_ question: RightsQuestion) -> RightsAnswer? {
+    func rights(_ question: RightsQuestion) -> LevelChoice? {
         questions.append(question)
         return answer?(question)
     }

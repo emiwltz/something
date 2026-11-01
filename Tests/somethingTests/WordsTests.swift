@@ -2,6 +2,7 @@
 // sheet's answers and New Space's level words. No window is shown.
 import AppKit
 import SomethingCore
+import SwiftUI
 import Testing
 @testable import something
 
@@ -47,11 +48,11 @@ import Testing
     /// for Run.
     @Test func theLevelSheetHoldsTheLevelAndRunsFolder() {
         let run = Ask.rights(RightsQuestion(space: "Morning review", description: nil, level: .run, folder: "/Users/example/code/shop"), home: home)
-        #expect(run.answer() == RightsAnswer(level: .run, folder: "/Users/example/code/shop") && run.sheet.buttons[1].isEnabled)
+        #expect(run.answer() == LevelChoice(level: .run, folder: .path("/Users/example/code/shop")) && run.sheet.buttons[1].isEnabled)
         #expect(!Ask.rights(RightsQuestion(space: "Board", description: nil, level: .run, folder: nil), home: home).sheet.buttons[1].isEnabled,
                 "Run waits for its folder")
         let watch = Ask.rights(RightsQuestion(space: "Board", description: nil, level: .watch, folder: "/Users/example/code/shop"), home: home)
-        #expect(watch.answer() == RightsAnswer(level: .watch, folder: nil) && watch.sheet.buttons[1].isEnabled)
+        #expect(watch.answer() == LevelChoice(level: .watch) && watch.sheet.buttons[1].isEnabled)
     }
 
     /// New Space's words pre-set the level, starting before writing before seeing; the agent hears it on a line of its own.
@@ -73,29 +74,50 @@ import Testing
         #expect(LevelChoice(level: .watch, scope: .all).line(home: home) == "[something] With your agents: Watch.")
         #expect(LevelChoice(level: .talk, scope: .folders([shop])).line(home: home) == "[something] With your agents: Talk, in ~/code/shop.")
         #expect(LevelChoice().line(home: home) == "[something] With your agents: None.")
-        #expect(LevelChoice(level: .none).said(home: home) == "This space may not see your agents.")
-        #expect(LevelChoice(level: .talk, scope: .folders([shop, home])).said(home: home, subject: "A new space") == "A new space may talk to the agents in 2 folders.")
-        #expect(LevelChoice(level: .run, start: Grant.Start(kind: "pi", model: "invented")).said(home: home) == "This space may start pi · invented.")
+        #expect(LevelChoice.agents(.folders([shop, home]), home: home) == "the agents in 2 folders" && LevelChoice.agents(nil, home: home) == "all your agents")
+        #expect(LevelChoice(start: Grant.Start(kind: "pi", model: "invented")).starts == "pi · invented" && LevelChoice().starts == "any agent")
         #expect(AssistantModel.shown("[something] No space is open: the person is on the blank page.\n[something] With your agents: Watch.\nA countdown.")
                 == ("on the blank page", "A countdown."), "the conversation shows the person's words only")
     }
 
-    /// The warning names who never asks, among the live agents the sentence reaches, or the agent it starts; else none.
+    /// The warning names who never asks among the agents the sentence can write to, and the agent it starts; else none.
+    /// A page that names one kind pre-sets it; a plain `launch` keeps "any agent".
     @Test func theWarningNamesWhoNeverAsks() {
-        func agent(_ kind: String, _ name: String?, folder: String = "/Users/example/a", state: String = "idle", alive: Bool? = true) -> Agent {
-            var agent = Agent(id: name ?? kind, kind: kind, origin: "elsewhere")
-            (agent.name, agent.folder, agent.state, agent.alive) = (name, folder, state, alive)
-            return agent
+        func agent(_ kind: String, _ title: String?, folder: String = "/Users/example/a", writes: Bool = true) -> (Agent, AgentThread?) {
+            var agent = Agent(id: title ?? kind, kind: kind, origin: "launched")
+            (agent.folder, agent.can.send) = (folder, writes)
+            return (agent, title.map { AgentThread(id: $0, agent: $0, title: $0, started: nil, turns: []) })
         }
-        let agents = [agent("pi", "Reading list"), agent("amp", "Shop tests"), agent("omp", nil), agent("pi", "Asleep", state: "sleep"), agent("pi", "Gone", alive: false),
-                      agent("claude", "Careful"), agent("pi", "Elsewhere", folder: "/Users/example/b")]
-        let talk = LevelChoice(level: .talk)
-        #expect(Levels.warning(talk, agents: []) == nil && Levels.warning(LevelChoice(level: .watch), agents: agents) == nil)
-        #expect(Levels.warning(talk, agents: agents) == "Reading list, Shop tests, OMP and Elsewhere never ask: this space can make them act without you.")
-        #expect(Levels.warning(LevelChoice(level: .talk, scope: .folders(["/Users/example/b"])), agents: agents) == "Elsewhere never asks: this space can make it act without you.")
-        #expect(Levels.warning(LevelChoice(level: .run, start: Grant.Start(kind: "claude")), agents: agents) == nil, "at start, only the agent it starts")
+        let pairs = [agent("pi", "Reading list"), agent("amp", "Shop tests"), agent("omp", nil), agent("pi", "Only read", writes: false),
+                     agent("claude", "Careful"), agent("pi", "Elsewhere", folder: "/Users/example/b")]
+        let agents = pairs.map(\.0), threads = pairs.compactMap(\.1), talk = LevelChoice(level: .talk)
+        func said(_ choice: LevelChoice, reach: Scope? = nil) -> String? { Levels.warning(choice, agents: agents, threads: threads, reach: reach) }
+        #expect(Levels.warning(talk, agents: []) == nil && said(LevelChoice(level: .watch)) == nil)
+        #expect(said(talk) == "Reading list, Shop tests, OMP and Elsewhere never ask: this space can make them act without you.")
+        #expect(said(LevelChoice(level: .talk, scope: .folders(["/Users/example/b"]))) == "Elsewhere never asks: this space can make it act without you.")
+        let careful = LevelChoice(level: .run, start: Grant.Start(kind: "claude"), folder: .path("/Users/example/b"))
+        #expect(said(careful) == "Elsewhere never asks: this space can make it act without you.", "start also writes to what is in its folder")
+        #expect(said(LevelChoice(level: .run, start: Grant.Start(kind: "claude"), folder: .blank)) == nil)
+        #expect(said(careful, reach: .folders([])) == nil, "the sheet's scope is the page's")
         #expect(Levels.warning(LevelChoice(level: .run, start: Grant.Start(kind: "amp")), agents: []) == "Amp never asks: this space can make it act without you.")
+        #expect(Levels.warning(LevelChoice(level: .run, start: Grant.Start(kind: "omp")), agents: []) == "OMP never asks by default: this space can make it act without you.")
         #expect(Levels.warning(LevelChoice(level: .run), agents: []) == Levels.runWarning, "no agent named: any launch")
+
+        let named = RightsQuestion(space: "Board", description: nil, level: .run, folder: "/Users/example/a", kinds: ["codex"])
+        #expect(Ask.rights(named, home: "/Users/example").answer() == LevelChoice(level: .run, start: Grant.Start(kind: "codex"), folder: .path("/Users/example/a")))
+        var plain = named
+        plain.kinds = []
+        #expect(Ask.rights(plain, home: "/Users/example").answer().start == nil)
+        var below = named
+        below.level = .talk
+        #expect(Ask.rights(below, home: "/Users/example").answer() == LevelChoice(level: .talk), "only Run has an agent and a folder")
+        var choice = LevelChoice(level: .run)
+        let any = Sentence("This space", choice: Binding(get: { choice }, set: { choice = $0 }), folders: [], home: "/Users/example", warning: nil, agents: ["pi"], anyAgent: true)
+        #expect(any.agentMenu.rows.map(\.title) == ["Any agent", "pi"] && any.agentMenu.rows[0].on)
+        any.agentMenu.rows[1].pick()
+        #expect(choice.start?.kind == "pi")
+        any.agentMenu.rows[0].pick()
+        #expect(choice.start == nil, "it can be chosen back")
     }
 
     /// A request in words: its effect by the tool's kind and the space, in the mockup's words, how long ago it was

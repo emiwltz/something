@@ -168,8 +168,6 @@ import SomethingCore
         var seen: [String: Date] = [:]
         /// What the space may do with the person's agents, chosen before Build: written as its grant once it appears.
         var choice = LevelChoice()
-        var level: Grant.Level { choice.level }
-        var folder: String? { choice.folder.path }
     }
     /// The builds running, oldest first, each watched until the turn that followed ends (answered, stopped, failed, or
     /// never started).
@@ -566,7 +564,9 @@ import SomethingCore
     var origin: String { chosenLevel != nil ? "Your choice" : Grant.Level.guessed(draft) != nil ? "Pre-set from your words" : Self.defaultOrigin }
     static let defaultOrigin = "Your default"
     /// What replaces the sentence's lock line. Assistants are no agent of a space: none can write to them.
-    var warning: String? { Levels.warning(choice, agents: engine.state.agents.filter { !engine.assistants.contains($0.id) }) }
+    var warning: String? {
+        Levels.warning(choice, agents: engine.state.agents.filter { !engine.assistants.contains($0.id) }, threads: engine.state.threads)
+    }
     /// Asks Run's folder when Build finds none; a test answers in its place.
     @ObservationIgnored var chooseFolder: (@escaping (String) -> Void) -> Void = Levels.chooseFolder
 
@@ -1063,8 +1063,13 @@ import SomethingCore
         guard let space = Spaces(root: places.spaces).list().first(where: { $0.name == name }),
               let declaration = Declaration.read(space, home: places.home, kinds: Registry.app.kinds).declaration else { return }
         let folder = choice.folder == .blank ? places.blank(name) : choice.folder.path
-        // Said "all your agents", it means all: never the narrower scope the page happens to declare.
-        let scope = [.watch, .talk].contains(choice.level) ? choice.scope ?? .all : nil
+        // The sentence holds, whatever the page declares: said "all your agents", it means all; said "start pi in a
+        // folder", the page sees that folder and what it starts, nothing wider.
+        let scope: Scope? = switch choice.level {
+        case .none: nil
+        case .run: folder.map { .folders([$0]) }
+        case .watch, .talk: choice.scope ?? .all
+        }
         try? Grants(places.grants).update {
             $0.spaces[name] = Rights.leveled(choice.level, folder: folder, declaration: declaration, at: iso8601.string(from: clock()), after: nil, start: choice.start, scope: scope)
         }

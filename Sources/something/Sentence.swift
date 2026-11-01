@@ -45,17 +45,6 @@ extension LevelChoice {
         }
     }
 
-    /// The sentence in plain words: for the build's page and the summary.
-    func said(home: String, subject: String = "This space") -> String {
-        switch level {
-        case .none: return "\(subject) may not see your agents."
-        case .run:
-            let place = folder == .none ? "" : folder == .blank ? " in a blank folder of its own" : " in " + place(home: home)
-            return "\(subject) may start \(starts)\(place)."
-        default: return "\(subject) may \(level.word) \(LevelChoice.agents(scope, home: home))."
-        }
-    }
-
     /// The line something adds to the first message of a build, for the assistant to declare exactly this. Run's folder
     /// is always known by then: New Space sends only once it is chosen.
     func line(home: String) -> String {
@@ -100,13 +89,6 @@ struct WordMenu {
             menu.addItem(item)
         }
         return menu
-    }
-
-    /// Its heading and rows as text, for the gallery's `.txt`.
-    var text: String {
-        ([title.uppercased()] + rows.map { row in
-            "  \(row.title)\(row.on ? "  ✓" : "")" + (row.note.map { "\n    " + $0.replacingOccurrences(of: "\n", with: "\n    ") } ?? "")
-        }).joined(separator: "\n") + "\n"
     }
 }
 
@@ -172,21 +154,20 @@ private struct Flow: Layout {
     let spacing: CGFloat = 5, line: CGFloat = 30
 
     /// The left edge and the line of each part, for a column `width` wide.
-    private func places(_ parts: Subviews, width: CGFloat) -> (places: [CGPoint], width: CGFloat, lines: Int) {
-        var (x, row, widest) = (CGFloat(0), 0, CGFloat(0)), places: [CGPoint] = []
+    private func places(_ parts: Subviews, width: CGFloat) -> (places: [CGPoint], lines: Int) {
+        var (x, row) = (CGFloat(0), 0), places: [CGPoint] = []
         for part in parts {
             let size = part.sizeThatFits(.unspecified)
             if x > 0, x + size.width > width { (x, row) = (0, row + 1) }
             places.append(CGPoint(x: x, y: CGFloat(row)))
-            widest = max(widest, x + size.width)
             x += size.width + spacing
         }
-        return (places, widest, row + 1)
+        return (places, row + 1)
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let laid = places(subviews, width: proposal.width ?? .infinity)
-        return CGSize(width: proposal.width ?? laid.width, height: CGFloat(laid.lines) * line)
+        let width = proposal.replacingUnspecifiedDimensions().width
+        return CGSize(width: width, height: CGFloat(places(subviews, width: width).lines) * line)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
@@ -205,12 +186,14 @@ struct Sentence: View {
     let space: String?
     /// Whether the lock line shows when no warning does: a sheet says it in its own words.
     let locks: Bool
+    /// Whether "any agent" is a choice: a page with a plain `launch`.
+    let anyAgent: Bool
 
     private let scopeSpot = WordSpot()
 
-    init(_ subject: String, choice: Binding<LevelChoice>, folders: [String], home: String, warning: String?, agents: [String]? = nil, space: String? = nil, locks: Bool = true) {
+    init(_ subject: String, choice: Binding<LevelChoice>, folders: [String], home: String, warning: String?, agents: [String]? = nil, space: String? = nil, locks: Bool = true, anyAgent: Bool = false) {
         (self.subject, self.choice, self.folders, self.home, self.warning) = (subject, choice, folders, home, warning)
-        (self.agents, self.space, self.locks) = (agents ?? Registry.app.builders.map(\.kind), space, locks)
+        (self.agents, self.space, self.locks, self.anyAgent) = (agents ?? Registry.app.builders.map(\.kind), space, locks, anyAgent)
     }
 
     var body: some View {
@@ -293,9 +276,10 @@ struct Sentence: View {
 
     var agentMenu: WordMenu {
         let chosen = choice.wrappedValue.start
-        return WordMenu(title: "Which agent it starts", rows: agents.map { kind in
+        let any = WordMenu.Row(title: "Any agent", note: "Whichever it asks for.", on: chosen == nil) { choice.wrappedValue.start = nil }
+        return WordMenu(title: "Which agent it starts", rows: (anyAgent ? [any] : []) + agents.map { kind in
             let agent = Registry.app.agent(kind), never = agent?.neverAsks == true || agent?.asksNothingByDefault == true
-            return .init(title: Registry.app.name(of: kind), note: never ? "never asks" : nil, on: kind == chosen?.kind) { choice.wrappedValue.start = Grant.Start(kind: kind) }
+            return WordMenu.Row(title: Registry.app.name(of: kind), note: never ? "never asks" : nil, on: kind == chosen?.kind) { choice.wrappedValue.start = Grant.Start(kind: kind) }
         })
     }
 

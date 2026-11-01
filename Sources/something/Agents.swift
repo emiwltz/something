@@ -64,7 +64,7 @@ struct AgentReading: Equatable {
     }
 
     /// The reader's title, else the person's first words. The folder's name, which stands in for a title in the state, is none.
-    private static func title(_ agent: Agent, _ thread: AgentThread?) -> String? {
+    static func title(_ agent: Agent, _ thread: AgentThread?) -> String? {
         let place = agent.folder.map { ($0 as NSString).lastPathComponent }
         if let title = thread?.title, !title.isEmpty, title != place, title != agent.kind { return title }
         let first = thread?.turns.lazy.flatMap(\.items).first { $0.kind == "message" && $0.author == "person" }

@@ -215,7 +215,7 @@ import WebKit
         let claude = bin.appendingPathComponent("claude")
         try "#!/bin/sh\nwhile IFS= read -r line; do :; done\n".write(to: claude, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
-        ask.answer = { RightsAnswer(level: $0.level, folder: shop.path) }
+        ask.answer = { LevelChoice(level: $0.level, folder: .path(shop.path)) }
         let engine = home.engine()
         let declared = #"{"contract": 1, "title": "Board", "rights": ["launch:claude"], "folder": "~/code/shop"}"#
         let board = try home.space("board", page(declared, "")), other = try home.space("other", page(nil, ""))
@@ -427,7 +427,7 @@ import WebKit
         try FileManager.default.createDirectory(at: shop, withIntermediateDirectories: true)
         let ask = FakeAsk()
         ask.lowers = true
-        ask.answer = { RightsAnswer(level: $0.level, folder: shop.path) }
+        ask.answer = { LevelChoice(level: $0.level, folder: .path(shop.path)) }
         let declared = #"{"contract": 1, "title": "Launcher", "rights": ["launch:opencode"], "folder": "~/code/shop"}"#
         let window = try await home.window(try home.space("launcher", page(declared, "<script>window.done = true</script>")), ask)
         defer { window.close() }
@@ -458,6 +458,46 @@ import WebKit
         }
     }
 
+    /// What the sheet answers is written whole: the agent, the blank folder, a scope the person changed. A launch that
+    /// names no model takes the one chosen, for that agent only. Don't Allow is kept: the sheet does not come back.
+    @Test func theSheetsAnswerIsKept() async throws {
+        let home = Home(prefix: "something-window-"), ask = FakeAsk()
+        defer { home.remove() }
+        let bin = home.root.appendingPathComponent("bin"), arguments = home.root.appendingPathComponent("arguments")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        let claude = bin.appendingPathComponent("claude")
+        try "#!/bin/sh\necho \"$@\" > \(arguments.path)\nwhile IFS= read -r line; do :; done\n".write(to: claude, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+        let declared = #"{"contract": 1, "title": "Board", "rights": ["state", "launch"]}"#
+        let space = try home.space("board", page(declared, "")), other = try home.space("other", page(declared, ""))
+        ask.answer = { _ in LevelChoice(level: .run, scope: .all, start: Grant.Start(kind: "claude", model: "invented", effort: "high"), folder: .blank) }
+        let view = try await home.window(space, ask)
+        defer { view.close() }
+        view.open()
+        try await ready(view)
+        let grant = try #require(try AppFile.read(home.places.grants).spaces["board"])
+        #expect(grant.start?.model == "invented" && grant.scope == .all && grant.granted.last == "launch:claude")
+        #expect(grant.folder == home.places.agents.appendingPathComponent("board").path && FileManager.default.fileExists(atPath: grant.folder ?? ""))
+        #expect(view.granted.agents == .all && view.granted.rights.contains("launch:claude"))
+        _ = try view.launch("claude", folder: try #require(grant.folder), model: nil, mode: nil, effort: nil)
+        #expect(await wait(until: { (try? String(contentsOf: arguments, encoding: .utf8))?.contains("invented") == true }), "the model chosen in the sentence")
+        var stopped = false
+        view.engine.stopAll(within: 6) { stopped = true }
+        #expect(await wait(until: { stopped }))
+
+        ask.answer = { _ in nil }
+        let refused = try await home.window(other, ask)
+        defer { refused.close() }
+        refused.open()
+        try await ready(refused)
+        let kept = try #require(try AppFile.read(home.places.grants).spaces["other"])
+        #expect(ask.questions.count == 2 && kept.level == .some(.none) && refused.granted.refused.contains("launch"))
+        refused.close()
+        refused.open()
+        try await ready(refused)
+        #expect(ask.questions.count == 2, "the sheet does not come back")
+    }
+
     /// The level sheet: pre-set to what the page needs, Allow ready; Return and Escape press Don't Allow, which holds the
     /// focus and grants nothing (NativeAsk returns nil).
     @Test func theLevelSheetIsPreSetAndDontAllowHoldsTheFocus() throws {
@@ -465,7 +505,7 @@ import WebKit
         let (sheet, answer) = Ask.rights(question, home: "/Users/example")
         #expect(PanelsTests.texts(sheet.contentView) == ["Review would like to work with your agents", "~/something/spaces/review.html", Levels.sheetFine])
         #expect(sheet.buttons.map(\.title) == ["Don’t Allow", "Allow"] && sheet.buttons.map(\.role) == [.cancel, .primary])
-        #expect(sheet.buttons[1].isEnabled && answer() == RightsAnswer(level: .talk, folder: nil))
+        #expect(sheet.buttons[1].isEnabled && answer() == LevelChoice(level: .talk))
         let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
                                                    characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
         #expect(sheet.performKeyEquivalent(with: escape) && sheet.chosen == .cancel)
@@ -495,7 +535,7 @@ import WebKit
         try await ready(first)
         first.close()
         #expect(ask.questions == [RightsQuestion(space: "Review", description: nil, level: .run, folder: shop.path, folders: [], page: space.location.path,
-                                                  scope: ask.questions.first?.scope ?? .all, name: space.name)],
+                                                  scope: ask.questions.first?.scope ?? .all, name: space.name, kinds: ask.questions.first?.kinds ?? [])],
                 "pre-set to Run, its folder the declared one, found on this Mac")
         #expect(first.granted.rights == ["state", "store", "launch:codex"] && first.granted.refused.isEmpty)
         #expect(first.granted.folder == shop.path)

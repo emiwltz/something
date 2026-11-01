@@ -27,25 +27,25 @@ again, and Help › How something Works the picture, one part at a time if you l
 
 The welcome ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space (a suggestion fills
 the field with an example). Under the field one sentence says what it may do with your agents, "This space may [watch]
-[all your agents].", pre-set from your words, else from Settings › Permissions, "not see" at first; each bracketed word
-opens a menu that explains its choices. Build, or ⌘↵ at any moment, starts it: your assistant builds it, decides what
-you left open and says so, and the space opens by itself when ready, with nothing more to allow. The space appears in
-the sidebar at once, with a ring that fills as it builds; you may leave New Space meanwhile, or build several at a time:
-nothing stops them, and a click on the row shows the build again. A space that finishes while you are elsewhere says "…
-is ready · Open" (and a notification of the Mac too while something is in the background, if you turned notifications
-on). Its assistant is asked to answer in two sentences, what is ready and one thing to try; the card then shows your
-words, one line of what was made and checked, and that answer; the steps and anything longer are folded under Details. A
-build that fails, or that you stop, keeps your words and their level on New Space to try again. Each space's assistant
-rests over it as a small sticker in a corner, whose eyes say what it does; drag it to the other side if it is in the
-way. Click it (or ⌘K) to ask for a change: the space reloads as your agent saves it. The first time, a small hint says
-so beside it; Info and Point each have one too, once, at a later opening. ⌘J shows the conversation, ⌘\ makes it small
-again, ⌘. stops the assistant. Its one chip, "Claude Code · Sonnet 5.5", changes the agent, the model and the effort of
-that space's conversation: models go by the names the agent gives them, and a kind something has not run yet says "Its
-models show after its first run". "/" at the start of its field lists the agent's own commands as the agent lists them
-(↑↓, Return sends one as you wrote it, Tab leaves it for its text); something remembers each agent's list for the next
-time it is not running. Templates (⇧⌘T) are six finished spaces to start from, and need no agent. ⌘P goes or asks: type
-a space's name to go there, or a sentence for an assistant. The line "Goes to" says once where it goes (this space, a
-New Space built from it, or another space), Tab changes it, and nothing is sent before Return. ⌘/ lists the shortcuts.
+[all your agents].", pre-set from your words, else from Settings › Agents, "not see" at first; each bracketed word opens
+a menu that explains its choices. Build, or ⌘↵ at any moment, starts it: your assistant builds it, decides what you left
+open and says so, and the space opens by itself when ready, with nothing more to allow. The space appears in the sidebar
+at once, with a ring that fills as it builds; you may leave New Space meanwhile, or build several at a time: nothing
+stops them, and a click on the row shows the build again. A space that finishes while you are elsewhere says "… is ready
+· Open" (and a notification of the Mac too while something is in the background, if you turned notifications on). Its
+assistant is asked to answer in two sentences, what is ready and one thing to try; the card then shows your words, one
+line of what was made and checked, and that answer; the steps and anything longer are folded under Details. A build that
+fails, or that you stop, keeps your words and their level on New Space to try again. Each space's assistant rests over
+it as a small sticker in a corner, whose eyes say what it does; drag it to the other side if it is in the way. Click it
+(or ⌘K) to ask for a change: the space reloads as your agent saves it. The first time, a small hint says so beside it;
+Info and Point each have one too, once, at a later opening. ⌘J shows the conversation, ⌘\ makes it small again, ⌘. stops
+the assistant. Its one chip, "Claude Code · Sonnet 5.5", changes the agent, the model and the effort of that space's
+conversation: models go by the names the agent gives them, and a kind something has not run yet says "Its models show
+after its first run". "/" at the start of its field lists the agent's own commands as the agent lists them (↑↓, Return
+sends one as you wrote it, Tab leaves it for its text); something remembers each agent's list for the next time it is
+not running. Templates (⇧⌘T) are six finished spaces to start from, and need no agent. ⌘P goes or asks: type a space's
+name to go there, or a sentence for an assistant. The line "Goes to" says once where it goes (this space, a New Space
+built from it, or another space), Tab changes it, and nothing is sent before Return. ⌘/ lists the shortcuts.
 
 **One assistant per space**: each space has its own conversation with your agent, so several can work at once, each on
 its own space. The sidebar lists your spaces by name, in groups you make; **Needs You**, at its top, lists the spaces
@@ -140,20 +140,19 @@ a copy whose first line you removed is yours and left alone.
 
 Every decision is yours, in a window of the Mac that a space cannot draw, imitate or answer:
 
-- **Rights.** One sentence says what a space may do with your agents, "This space may [watch] [these agents].": **not
+- **Rights.** One sentence says what a space may do with your agents, "This space may [watch] [all your agents].": **not
   see** them; **watch** them, it sees their state, folder and last messages; **talk to** them, it also writes to them (a
   message, stop one, change its model); **start** one, it also starts one in a folder you pick. Its second word says
-  which agents: these agents, all agents on this Mac, or only those in a folder. In the contract these are the levels
-  None, Watch, Talk and Run. On New Space you choose it before Build, pre-set from your words (else from Settings ›
-  Permissions, "not see" at first): that choice is your consent, and the space opens without asking. A space made
-  elsewhere (a template, an import, an agent outside something) asks in a sheet at its first opening, with the same
-  sentence, pre-set to what it declares; Don't Allow is kept, and it does not ask again by itself. What a space declares
-  above its level stays refused, without asking again. Its memory needs no permission: it stays with the space. Info
-  (⌘I), a panel beside the space, says it all in three parts: the space (its file, its size, Export, History), your
-  agents (its level, one control that changes it at once, Run's folder, and the agents it shows now) and its assistant
-  (its agent and model, its last reply, Open Conversation). Settings › Agents lists every space with its level, and
-  changes one the same way; Settings › Advanced › Folders lists each folder your spaces run agents in, with those
-  spaces.
+  which agents: all agents on this Mac, or only those in a folder. In the contract these are the levels None, Watch,
+  Talk and Run. On New Space you choose it before Build, pre-set from your words (else from Settings › Agents, "not see"
+  at first): that choice is your consent, and the space opens without asking. A space made elsewhere (a template, an
+  import, an agent outside something) asks in a sheet at its first opening, with the same sentence, pre-set to what it
+  declares; Don't Allow is kept, and it does not ask again by itself. What a space declares above its level stays
+  refused, without asking again. Its memory needs no permission: it stays with the space. Info (⌘I), a panel beside the
+  space, says it all in three parts: the space (its file, its size, Export, History), your agents (its level, one
+  control that changes it at once, Run's folder, and the agents it shows now) and its assistant (its agent and model,
+  its last reply, Open Conversation). Settings › Agents lists every space with its level, and changes one the same way;
+  Settings › Advanced › Folders lists each folder your spaces run agents in, with those spaces.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". A space
   sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
   assistant asks while it builds, which New Space shows with its choices while it shows that build (elsewhere, it is

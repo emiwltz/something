@@ -1,6 +1,6 @@
 // New Space (⌘N), the center when no space is open: the sign lands, "What do you want to make?", a flat field whose
 // Return builds (⇧Return adds a line) with, in its bar, who builds it and with which model, Build Now and Continue;
-// under it, the sentence of what the space may do with your agents (Levels.swift), pre-set from the words, which is the
+// under it, the sentence of what the space may do with your agents (Sentence.swift), pre-set from the words, which is the
 // consent; and three suggestions that each fill the field. Without a coding agent, the notice takes the field's place.
 // Build makes it a build of its own, which the page then shows: its name for now as the title, the sentence sent held
 // in the field with the level chosen under it, the ladder saying what it does (Ladder.swift); the person may leave, it
@@ -94,16 +94,16 @@ struct BlankView: View {
 
     /// What the build may do with the person's agents, chosen before Build: one chip under its words.
     private func chosen(_ build: AssistantModel.Build) -> some View {
-        let folder = build.level == .run ? build.folder.map { " in " + Words.path($0, home: library.places.home.path) } ?? "" : ""
+        let level = build.choice.level, folder = level == .run ? build.choice.folder.path.map { " in " + Words.path($0, home: library.places.home.path) } ?? "" : ""
         return HStack(spacing: 6) {
             Image(systemName: "person.2").font(.system(size: 10.5)).foregroundStyle(Look.Token.ink3.ui)
-            Text("\(build.level.title) · your agents\(folder)")
+            Text("\(level.title) · your agents\(folder)")
         }
         .font(Look.font(.ui, size: 12, weight: .medium).ui).foregroundStyle(Look.Token.ink2.ui)
         .padding(.horizontal, 10).frame(height: 26)
         .background(Capsule(style: .circular).strokeBorder(Look.Token.line2.ui))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("With your agents: \(build.level.title)\(folder)")
+        .accessibilityLabel("With your agents: \(level.title)\(folder)")
     }
 
     /// "Describe it in your words…", the folder `path` drawn as code.

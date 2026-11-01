@@ -290,7 +290,7 @@ struct AcceptanceBuild {
         #expect(model.level == .run && model.runFolder == .path(shop.path), "the folder chosen earlier stays")
         model.runFolder = .none
         model.send()
-        #expect(asked == 1 && model.building && model.before?.level == .run && model.before?.folder == shop.path && model.chosenLevel == nil)
+        #expect(asked == 1 && model.building && model.before?.choice.level == .run && model.before?.choice.folder == .path(shop.path) && model.chosenLevel == nil)
         #expect(await wait(until: { !model.building && model.rows.last == .reply("Invented reply.") }))
         #expect(model.rows.contains(.mine(caption: "on the blank page", text: "A page that starts a reviewer agent in my shop.")))
         // A reply older than the page belongs to another moment: back on New Space (as after a space made opens, or a
@@ -383,7 +383,7 @@ struct AcceptanceBuild {
         #expect(ladder.steps.map(\.name) == ["Plan", "Write", "Check"] && ladder.steps.map(\.mark) == [.done, .now, .later])
         #expect(ladder.steps[1].file == "waiting-room.html" && ladder.steps[2].note == "Opens it, reads it, looks for errors" && ladder.eyes == .think)
         #expect(ladder.say == "I’ll make “Waiting room”: one card per agent that waits for you, oldest first." && ladder.progress == 0.5)
-        #expect(model.builds.map(\.id) == [build.id] && model.watched == build.id && build.level == .watch)
+        #expect(model.builds.map(\.id) == [build.id] && model.watched == build.id && build.choice.level == .watch)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "j3-4" + suffix, root: stage.home.root)
             let says = { (words: [String]) in
@@ -426,14 +426,22 @@ struct AcceptanceBuild {
         Stage.work(library)
         shell.waiting([], mine: 0)
         let model = shell.assistant
-        model.engine.update(outside: Stage.world)
-        #expect(model.origin == "Your default" && model.choice.said(home: "/Users/example") == "This space may not see your agents.")
+        // As the mockup's: two agents of a space's own that never ask, and the Stage's, which it only reads.
+        var world = Stage.world
+        for (id, kind, title, folder) in [("reading", "pi", "Reading list", "notes"), ("tests", "amp", "Shop tests", "code/shop")] {
+            var agent = Agent(id: id, kind: kind, origin: "launched")
+            (agent.folder, agent.alive, agent.state, agent.can.send) = ("/Users/example/" + folder, true, "idle", true)
+            world.agents.append(agent)
+            world.threads.append(AgentThread(id: id, agent: id, title: title, started: nil, turns: []))
+        }
+        model.engine.update(outside: world)
+        #expect(model.origin == "Your default" && model.choice.line(home: "/Users/example") == "[something] With your agents: None.")
         #expect(model.warning == nil && Levels.fine == "Whatever an agent asks still waits for you.")
         #expect(BlankView.placeholder == "A space that shows who is waiting for me, oldest first…")
         model.draft = "A space that shows who is waiting for me, oldest first"
         #expect(model.level == .watch && model.origin == "Pre-set from your words", "words that ask for agents pre-set watch")
         model.draft = BlankView.chips[0].1
-        #expect(model.choice.said(home: "/Users/example") == "This space may watch all your agents." && model.warning == nil)
+        #expect(model.choice.line(home: "/Users/example") == "[something] With your agents: Watch." && model.warning == nil)
         let sentence = Self.sentence(model)
         #expect(sentence.levelMenu.title == "What it may do with your agents")
         #expect(sentence.levelMenu.rows.map(\.title) == ["not see", "watch", "talk to", "start"])
@@ -446,22 +454,21 @@ struct AcceptanceBuild {
         #expect(system.items.map(\.title) == ["What it may do with your agents", "not see", "watch", "talk to", "start"] && system.items[3].subtitle == "Sees and writes to them.")
         sentence.levelMenu.rows[2].pick()
         #expect(model.level == .talk && model.origin == "Your choice")
-        #expect(model.warning == "shop and notes never ask: this space can make them act without you.", "\(model.warning ?? "")")
+        #expect(model.warning == "Reading list and Shop tests never ask: this space can make them act without you.", "\(model.warning ?? "")")
         // A folder narrows who it reaches: the warning, the line and what the page will see follow.
         #expect(sentence.scopeFolderMenu.title == "Which folder")
         #expect(sentence.scopeFolderMenu.rows.map(\.title) == ["~/code/pacman", "~/code/portfolio", "~/code/shop", "~/notes", "Choose Folder…"])
         sentence.scopeFolderMenu.rows[2].pick()
-        #expect(model.choice.scope == .folders(["/Users/example/code/shop"]) && model.warning == "shop never asks: this space can make it act without you.")
-        #expect(model.choice.said(home: "/Users/example") == "This space may talk to the agents in ~/code/shop.")
+        #expect(model.choice.scope == .folders(["/Users/example/code/shop"]) && model.warning == "Shop tests never asks: this space can make it act without you.")
         #expect(model.choice.line(home: "/Users/example") == "[something] With your agents: Talk, in ~/code/shop.")
         sentence.scopeMenu.rows[0].pick()
-        #expect(model.warning == "shop and notes never ask: this space can make them act without you.")
+        #expect(model.warning == "Reading list and Shop tests never ask: this space can make them act without you.")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "r1-1" + suffix, root: stage.home.root)
             let words = await Self.read(host) { $0 == Self.newSpaceWords(BlankView.chips[0].1, sentence: Self.talkWords) }
             #expect(words == Self.newSpaceWords(BlankView.chips[0].1, sentence: Self.talkWords), "\(words)")
         }
-        if let gallery { try (sentence.levelMenu.text + sentence.scopeMenu.text).write(to: gallery.appendingPathComponent("r1-1-menu.txt"), atomically: true, encoding: .utf8) }
+        if let gallery { try (Self.text(sentence.levelMenu) + Self.text(sentence.scopeMenu)).write(to: gallery.appendingPathComponent("r1-1-menu.txt"), atomically: true, encoding: .utf8) }
         await Self.finish(model)
     }
 
@@ -486,7 +493,7 @@ struct AcceptanceBuild {
         #expect(shown.first?.title == "Where it starts them")
         #expect(shown.first?.rows.map(\.title).suffix(2) == ["No Folder", "Choose Folder…"] && shown.first?.rows.count == 6)
         shown.first?.rows[2].pick()
-        #expect(model.warning == nil && model.choice.said(home: "/Users/example") == "This space may start Claude Code in ~/code/shop.")
+        #expect(model.warning == nil)
         #expect(model.choice.line(home: "/Users/example") == "[something] With your agents: Run, starts Claude Code, in ~/code/shop.")
         await wait(0.1)
         #expect(shown.count == 1, "it opens once")
@@ -503,7 +510,7 @@ struct AcceptanceBuild {
             let words = await Self.read(host) { $0 == Self.newSpaceWords(BlankView.chips[0].1, sentence: Self.startLine) }
             #expect(words == Self.newSpaceWords(BlankView.chips[0].1, sentence: Self.startLine), "\(words)")
         }
-        if let gallery { try (sentence.agentMenu.text + sentence.folderMenu.text).write(to: gallery.appendingPathComponent("r1-2-menu.txt"), atomically: true, encoding: .utf8) }
+        if let gallery { try (Self.text(sentence.agentMenu) + Self.text(sentence.folderMenu)).write(to: gallery.appendingPathComponent("r1-2-menu.txt"), atomically: true, encoding: .utf8) }
         await Self.finish(model)
     }
 
@@ -525,14 +532,20 @@ struct AcceptanceBuild {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "r5-3" + suffix, root: stage.home.root)
         }
-        if let gallery { try Self.sentence(model).folderMenu.text.write(to: gallery.appendingPathComponent("r5-3-menu.txt"), atomically: true, encoding: .utf8) }
+        if let gallery { try Self.text(Self.sentence(model).folderMenu).write(to: gallery.appendingPathComponent("r5-3-menu.txt"), atomically: true, encoding: .utf8) }
         row.pick()
-        #expect(model.runFolder == .blank && model.choice.said(home: "/Users/example") == "This space may start Claude Code in a blank folder of its own.")
+        #expect(model.runFolder == .blank)
         #expect(model.choice.line(home: "/Users/example") == "[something] With your agents: Run, starts Claude Code, in a blank folder of its own.")
         model.send("A page for my mornings.")
         #expect(model.before?.choice.folder == .blank && model.chosenLevel == nil && model.chosenStart == nil)
         #expect(await wait(until: { !model.building }))
         await Self.finish(model)
+    }
+
+    /// A menu's heading and rows as text, for the gallery: no picture reaches a system menu.
+    static func text(_ menu: WordMenu) -> String {
+        ([menu.title.uppercased()] + menu.rows.map { "  \($0.title)\($0.on ? "  ✓" : "")" + ($0.note.map { "\n    " + $0.replacingOccurrences(of: "\n", with: "\n    ") } ?? "") })
+            .joined(separator: "\n") + "\n"
     }
 
     /// The sentence New Space draws, for reading its menus.
@@ -722,7 +735,8 @@ struct AcceptanceBuild {
                                                          "Whatever an agent asks still waits for you, in a window of your Mac: Allow Once or Deny. Its memory needs no permission."])
         #expect(sheet.buttons.map(\.title) == ["Don’t Allow", "Allow"] && sheet.buttons.map(\.hint) == ["esc", nil])
         #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}" && sheet.buttons[1].isEnabled)
-        #expect(sheet.accessibilitySubrole() == .dialog && answer() == RightsAnswer(level: .watch, folder: nil))
+        #expect(sheet.accessibilitySubrole() == .dialog && answer() == LevelChoice(level: .watch))
+        #expect(LevelChoice.agents(question.scope, home: "/Users/example") == "only its own agents")
         // What VoiceOver reads (the level's sentence, a plain text of SwiftUI, is out of reach offscreen).
         let said = ["Two people", "Waiting room would like to work with your agents", "~/something/spaces/waiting-room.html", "What it may do", "Which agents it shows"]
             + [Levels.sheetFine, "Don’t Allow", "Allow"]
@@ -737,7 +751,7 @@ struct AcceptanceBuild {
         var run = question
         run.level = .run
         let (runSheet, runAnswer) = Ask.rights(run, home: stage.home.root.path)
-        #expect(!runSheet.buttons[1].isEnabled && runAnswer() == RightsAnswer(level: .run, folder: nil))
+        #expect(!runSheet.buttons[1].isEnabled && runAnswer() == LevelChoice(level: .run))
         try await stage.appearances { suffix in
             try await Picture.sheet(runSheet, over: shell, library: library, web: nil, "d4-run" + suffix, root: stage.home.root)
         }

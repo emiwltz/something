@@ -147,6 +147,15 @@ struct RightsTests {
         #expect(Rights.granted(reading, narrow, limits: [:], home: home).agents == .folders(["/Users/example/b"]), "or narrower")
         #expect(Rights.leveled(.none, folder: nil, declaration: declared, at: at, after: narrow).scope == narrow.scope, "it survives a change of level")
 
+        // A page that declares all, at Run in a folder: an agent elsewhere stays hidden, what it launched stays seen.
+        var page = DeclarationReading()
+        page.declaration = declaration(["state", "launch"])
+        let room = Rights.granted(page, Rights.leveled(.run, folder: "/Users/example/code/shop", declaration: declared, at: at, after: nil, start: pi, scope: .folders(["/Users/example/code/shop"])), limits: [:], home: home)
+        var (inside, outside, mine) = (Agent(id: "in", kind: "pi", origin: "elsewhere"), Agent(id: "out", kind: "pi", origin: "elsewhere"), Agent(id: "mine", kind: "pi", origin: "launched"))
+        (inside.folder, outside.folder, mine.folder) = ("/Users/example/code/shop", "/Users/example/notes", "/Users/example/notes")
+        let world = State(at: at, kinds: [:], agents: [inside, outside, mine])
+        #expect(Rights.visible(world, room, launched: ["mine"]).agents.map(\.id) == ["in", "mine"])
+
         var file = AppFile()
         file.spaces["a"] = run
         let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("rights-\(UUID().uuidString).json")

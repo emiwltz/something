@@ -29,18 +29,14 @@ struct RightsQuestion: Equatable {
     /// The space's file name, for its blank folder, and the agents that never ask, for the warning.
     var name: String? = nil
     var agents: [Agent] = []
+    /// The kinds its `launch:<kind>` rights name: the agents it can start; empty for a plain `launch`.
+    var kinds: [String] = []
 }
 
 /// The person's answer: the level, and the folder in force for launches when it is Run.
-struct RightsAnswer: Equatable {
-    var level: Grant.Level, folder: String?
-    /// No Folder was chosen: the space's blank folder, and what else the sentence changed.
-    var blank = false, scope: Scope? = nil, start: Grant.Start? = nil
-}
-
 protocol Asking: AnyObject {
-    /// The person's answer, or nil when they chose "Don’t Allow": nothing is remembered and the space gets nothing new.
-    func rights(_ question: RightsQuestion) -> RightsAnswer?
+    /// The person's sentence, its scope nil when they left the page's own, or nil when they chose "Don’t Allow".
+    func rights(_ question: RightsQuestion) -> LevelChoice?
     /// true when the person lets the space put an agent of `kind`, working in `folder`, in `mode`, which makes it ask less.
     func lowers(_ mode: String, kind: String, folder: String?, space: String) -> Bool
     /// true when the person chose to open `url`, which is then already open in their browser or mail app; false when
@@ -86,7 +82,7 @@ final class NativeAsk: Asking {
         return sheet.chosen
     }
 
-    func rights(_ question: RightsQuestion) -> RightsAnswer? {
+    func rights(_ question: RightsQuestion) -> LevelChoice? {
         let sheet = Ask.rights(question)
         return wait(sheet.sheet) == .primary ? sheet.answer() : nil
     }

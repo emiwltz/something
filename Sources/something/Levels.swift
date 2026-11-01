@@ -59,26 +59,25 @@ enum Levels {
     static var runWarning: String? { Ask.warning(for: "launch").map { $0 + "." } }
     /// That warning under Run, when there is one.
     @ViewBuilder static var runNote: some View { if let runWarning { note(runWarning, warns: true) } }
-    /// The one warning that replaces that line: at Talk, the agents the choice reaches that never ask, by their names;
-    /// at Run, the agent it starts when that one never asks, or, with none named, what any launch may reach. Else nil.
-    static func warning(_ choice: LevelChoice, agents: [Agent]) -> String? {
+    /// The one warning that replaces that line, at Talk and at Run: the agent it starts, when that one never asks, and
+    /// those it can write to that never ask, by their titles; an agent it only reads is out of its reach. With no agent
+    /// named at Run, what any launch may reach. `reach` is the agents' scope when it is not the sentence's. Else nil.
+    static func warning(_ choice: LevelChoice, agents: [Agent], threads: [AgentThread] = [], reach: Scope? = nil) -> String? {
+        guard choice.level >= .talk else { return nil }
+        if choice.level == .run, choice.start == nil { return runWarning }
         func loose(_ kind: String) -> Bool { Registry.app.agent(kind).map { $0.neverAsks || $0.asksNothingByDefault } ?? false }
-        let names: [String]
-        switch choice.level {
-        case .none, .watch: return nil
-        case .run:
-            guard let start = choice.start else { return runWarning }
-            names = loose(start.kind) ? [Registry.app.name(of: start.kind)] : []
-        case .talk:
-            let reached = agents.filter { loose($0.kind) && $0.alive != false && $0.state != "sleep" && $0.state != "ended" && Rights.contains(choice.scope ?? .all, $0.folder) }
-            names = reached.reduce(into: []) { names, agent in
-                let name = agent.name ?? Registry.app.name(of: agent.kind)
-                if !names.contains(name) { names.append(name) }
-            }
+        let scope = reach ?? (choice.level == .run ? .folders([choice.folder.path].compactMap { $0 }) : choice.scope ?? .all)
+        var names: [String] = [], kinds: [String] = []
+        for (name, kind) in [choice.start.map { (Registry.app.name(of: $0.kind), $0.kind) }].compactMap({ $0 })
+            + agents.filter({ $0.can.send && Rights.contains(scope, $0.folder) }).map({ agent in
+                (AgentReading.title(agent, threads.first { $0.agent == agent.id }) ?? Registry.app.name(of: agent.kind), agent.kind)
+            }) where loose(kind) && !names.contains(name) {
+            (names, kinds) = (names + [name], kinds + [kind])
         }
         guard let last = names.last else { return nil }
-        if names.count == 1 { return "\(last) never asks: this space can make it act without you." }
-        return "\(names.dropLast().joined(separator: ", ")) and \(last) never ask: this space can make them act without you."
+        if names.count > 1 { return "\(names.dropLast().joined(separator: ", ")) and \(last) never ask: this space can make them act without you." }
+        let usual = kinds.last.flatMap(Registry.app.agent)?.neverAsks == false
+        return "\(last) never asks\(usual ? " by default" : ""): this space can make it act without you."
     }
     static let sheetFine = "Whatever an agent asks still waits for you, in a window of your Mac: Allow Once or Deny. Its memory needs no permission."
 
@@ -198,19 +197,27 @@ struct LevelCard: View {
     init(_ choice: LevelChoice) { self.choice = choice }
 }
 
-/// What the level sheet holds under its title: the sentence. `changed` hears each change, once the view drew it.
+/// What the level sheet holds under its title: the sentence, and at Run what the page keeps besides starting: its own
+/// scope, which the person reads here as nothing else says it. `changed` hears each change, once the view drew it.
 struct LevelSheetView: View {
     @Bindable var answer: LevelAnswer
     let question: RightsQuestion, home: String, width: CGFloat, changed: () -> Void
 
     var body: some View {
-        // The sheet's own line says what a level never covers.
-        Sentence("This space", choice: $answer.choice, folders: question.folders, home: home,
-                 warning: Levels.warning(answer.choice, agents: question.agents), space: question.name, locks: false)
-            // As wide as the sheet's text, so that a sentence wraps there and the sheet measures its height.
-            .frame(width: width, alignment: .leading)
-            .padding(.top, 4)
-            .onChange(of: answer.choice) { DispatchQueue.main.async(execute: changed) }
+        let chosen = answer.choice
+        VStack(alignment: .leading, spacing: 6) {
+            // The sheet's own line says what a level never covers.
+            Sentence("This space", choice: $answer.choice, folders: question.folders, home: home,
+                     warning: Levels.warning(chosen, agents: question.agents, reach: question.scope), agents: question.kinds.isEmpty ? nil : question.kinds,
+                     space: question.name, locks: false, anyAgent: question.kinds.count != 1)
+            if chosen.level == .run, ![.folders([]), .folders([chosen.folder.path].compactMap { $0 })].contains(question.scope) {
+                Text("It also sees and writes to \(LevelChoice.agents(question.scope, home: home)).").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
+            }
+        }
+        // As wide as the sheet's text, so that a sentence wraps there and the sheet measures its height.
+        .frame(width: width, alignment: .leading)
+        .padding(.top, 4)
+        .onChange(of: answer.choice) { DispatchQueue.main.async(execute: changed) }
     }
 }
 
@@ -219,7 +226,7 @@ extension Ask {
     /// with your agents", where its page is, the sentence pre-set to what the page needs, and Run's folder. Allow
     /// waits for Run's folder; Return and Escape press Don't Allow, which holds the focus. Paths are shown from `home`.
     /// Built apart from showing it, so that a test can draw it without showing it.
-    static func rights(_ question: RightsQuestion, home: String = NSHomeDirectory()) -> (sheet: Sheet, answer: () -> RightsAnswer) {
+    static func rights(_ question: RightsQuestion, home: String = NSHomeDirectory()) -> (sheet: Sheet, answer: () -> LevelChoice) {
         let text = Sheet.column(width: rightsWidth)
         let lines = NSStackView()
         (lines.orientation, lines.alignment, lines.spacing) = (.vertical, .leading, 10)
@@ -238,7 +245,8 @@ extension Ask {
         }
         if let description = question.description { lines.addArrangedSubview(Sheet.label([(description, false)], Look.medium, color: .ink2, width: text)) }
         if let last = lines.arrangedSubviews.last { lines.setCustomSpacing(14, after: last) }
-        let answer = LevelAnswer(LevelChoice(level: question.level, scope: question.scope, folder: question.folder.map { .path($0) } ?? .none))
+        let answer = LevelAnswer(LevelChoice(level: question.level, scope: question.scope, start: question.kinds.count == 1 ? Grant.Start(kind: question.kinds[0]) : nil,
+                                             folder: question.folder.map { .path($0) } ?? .none))
         var refit: () -> Void = {}
         let choice = NSHostingView(rootView: LevelSheetView(answer: answer, question: question, home: home, width: text) { refit() })
         lines.addArrangedSubview(choice)
@@ -252,10 +260,11 @@ extension Ask {
             sheet?.refit()
         }
         return (sheet, {
-            let chosen = answer.choice
+            var chosen = answer.choice
             // A scope left as the page declares it follows the page: only a change of the person's is kept.
-            return RightsAnswer(level: chosen.level, folder: chosen.level == .run ? chosen.folder.path : nil, blank: chosen.level == .run && chosen.folder == .blank,
-                                scope: chosen.scope == question.scope ? nil : chosen.scope, start: chosen.start)
+            if chosen.scope == question.scope { chosen.scope = nil }
+            if chosen.level != .run { (chosen.start, chosen.folder) = (nil, .none) }
+            return chosen
         })
     }
 

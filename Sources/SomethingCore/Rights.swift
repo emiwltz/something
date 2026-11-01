@@ -155,9 +155,9 @@ public enum Rights {
 
     /// The grant once the person chose `level` for the space declaring `declaration`: the level's words allowed, the
     /// others refused, `folder` in force for Run (kept from before when nil). A later declaration asks nothing more: a
-    /// right above the level stays refused, and Run's folder is the one chosen, whatever the page then declares. `start`,
-    /// kept like the folder, narrows Run's `launch` to that kind, so that "may start pi" is what the bridge enforces;
-    /// `scope` replaces the scope in force when given.
+    /// right above the level stays refused, and Run's folder is the one chosen, whatever the page then declares. `start`
+    /// narrows Run's `launch` to that kind, so that "may start pi" is what the bridge enforces: kept while Run lasts, as
+    /// the folder is, and dropped below it. `scope` replaces the scope in force when given.
     public static func leveled(_ level: Grant.Level, folder: String?, declaration: Declaration, at: String, after grant: Grant?,
                                start: Grant.Start? = nil, scope: Scope? = nil) -> Grant {
         var next = grant ?? Grant(declared: Asked(declaration), at: at)

@@ -356,11 +356,16 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         // Forgotten answers (a space deleted, then made again under its name): the agents kept under that name are
         // not this space's.
         if grant == nil { launched = [] }
-        guard !Rights.toAsk(declaration, since: grant).isEmpty, let answer = ask.rights(question(declaration, grant)) else { return grant }
+        guard !Rights.toAsk(declaration, since: grant).isEmpty else { return grant }
+        let answer = ask.rights(question(declaration, grant)), at = iso8601.string(from: Date())
+        let folder = answer?.folder == .blank ? places.blank(space.name) : answer?.folder.path
         // Applied to the grant as the file holds it after the sheet, so that a change made meanwhile stays.
         func answered(_ before: Grant?) -> Grant {
-            Rights.leveled(answer.level, folder: answer.blank ? places.blank(space.name) : answer.folder, declaration: declaration,
-                           at: iso8601.string(from: Date()), after: before, start: answer.start, scope: answer.scope)
+            if let answer { return Rights.leveled(answer.level, folder: folder, declaration: declaration, at: at, after: before, start: answer.start, scope: answer.scope) }
+            // Don't Allow is kept, so that the sheet does not come back: what it had stays, or None; Run without a
+            // folder, which would ask again, stops at Talk.
+            let had = before.map(Rights.level(of:)) ?? .none
+            return Rights.leveled(had == .run && before?.folder == nil ? .talk : had, folder: nil, declaration: declaration, at: at, after: before)
         }
         do { return try grants.update { $0.spaces[space.name] = answered($0.spaces[space.name]) }.spaces[space.name] } catch {
             ask.tell(error.sentence)
@@ -377,7 +382,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         return RightsQuestion(space: declaration.title, description: declaration.description,
                               level: grant.map { max(Rights.level(of: $0), needed) } ?? needed, folder: grant?.folder ?? found,
                               folders: Levels.folders(engine.state), made: made, page: space.location.path, scope: scope, name: space.name,
-                              agents: engine.state.agents.filter { !engine.assistants.contains($0.id) })
+                              agents: engine.state.agents.filter { !engine.assistants.contains($0.id) },
+                              kinds: declaration.rights.filter { $0.hasPrefix("launch:") }.map { String($0.dropFirst("launch:".count)) })
     }
 
     /// Tells the page the state it sees changed. Called at most four times a second (App.swift); the same state twice
