@@ -36,7 +36,7 @@ enum Catalog {
     /// Round 2's frozen steps, by the step in lower case with a dash ("x3-1" for X3.1; its scenario's function is
     /// x3_1; "2-6" for 2.6, v2_6), and the slice that builds each.
     static let frozen: [(id: String, slice: String)] = [
-        ("x1-2", "S2"), ("x3-1", "S2"), ("x5-1", "S3"), ("x5-2", "S3"),
+        ("x1-2", "S2"), ("x3-1", "S2"), ("x5-1", "S3"),
         ("x9-1", "S5"), ("j3-4", "S4"), ("x3-2", "S4"), ("x3-3", "S4"),
         ("2-6", "S6"), ("2-8", "S6"),
         ("j4-2", "S8"), ("x6-1", "S9"), ("x6-2", "S9"), ("x6-3", "S9"),
@@ -69,6 +69,7 @@ enum Catalog {
     /// The frozen steps no scenario draws, each with why: what they showed was replaced by a later step Emi chose, or
     /// is no screen of its own.
     static let retiredSteps: [String: String] = [
+        "x5-2": "the level as one click of four: the sentence replaces the control, a1-3 proves it, f5-1 what a level too high says",
         "2-4": "the title's small card: v6.2's title opens Info itself (X9.1, S5), asserted by x9-1",
         "x2-2": "Built by: three chips replace it in beat 3, f1-3",
         "x2-1": "the one-screen welcome: five beats replace it, f1-1 to f1-5",

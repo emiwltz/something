@@ -294,4 +294,42 @@ struct RightsTests {
         agent.thread = "t1"
         #expect(Rights.key(agent) == "claude:t1")
     }
+
+    /// The person's list: by key, so it outlives an id; it wins over any scope; hides what the space launched only once
+    /// that left `launched`; and at None nothing shows, not even what the space launched.
+    @Test func theListWinsAndNoneShowsNothing() throws {
+        func agent(_ id: String, thread: String?, folder: String) -> Agent {
+            var agent = Agent(id: id, kind: "claude", origin: "elsewhere")
+            (agent.thread, agent.folder) = (thread, folder)
+            return agent
+        }
+        var world = State(at: "2026-10-22T18:00:00Z", kinds: [:], agents: [agent("a", thread: "one", folder: "/shop"), agent("b", thread: "two", folder: "/shop"), agent("c", thread: nil, folder: "/blog")])
+        world.threads = [AgentThread(id: "one", agent: "a", title: nil, started: nil, turns: []), AgentThread(id: "two", agent: "b", title: nil, started: nil, turns: [])]
+        var room = Granted()
+        (room.rights, room.agents, room.listed) = (["state"], .all, ["claude:one", "c"])
+        #expect(Rights.visible(world, room, launched: []).agents.map(\.id) == ["a", "c"], "the scope says all, the list wins")
+        #expect(Rights.visible(world, room, launched: []).threads.map(\.id) == ["one"], "threads follow")
+        #expect(Rights.visible(world, room, launched: ["b"]).agents.map(\.id) == ["a", "b", "c"], "a launch not yet in the list shows")
+        world.agents[0].id = "a2"
+        #expect(Rights.visible(world, room, launched: []).agents.map(\.id) == ["a2", "c"], "the key outlives the id")
+        var bare = room
+        bare.rights = ["store"]
+        #expect(Rights.visible(world, bare, launched: ["b"]).agents.isEmpty, "at None, none")
+        bare.rights = ["send"]
+        #expect(Rights.visible(world, bare, launched: ["b"]).agents.map(\.id) == ["b"], "without state, only what it launched")
+    }
+
+    /// A list survives a level, a scope chosen ends it, it reaches the page, and what was written before it reads.
+    @Test func aScopeEndsTheListAndALevelKeepsIt() throws {
+        let declared = declaration(["state", "send"])
+        var grant = Rights.leveled(.watch, folder: nil, declaration: declared, at: "t", after: nil)
+        grant.listed = ["claude:one"]
+        #expect(Rights.leveled(.none, folder: nil, declaration: declared, at: "t", after: grant).listed == ["claude:one"])
+        #expect(Rights.leveled(.talk, folder: nil, declaration: declared, at: "t", after: grant, scope: .all).listed == nil)
+        var page = DeclarationReading()
+        page.declaration = declared
+        #expect(Rights.granted(page, grant, limits: [:], home: URL(fileURLWithPath: "/Users/example")).listed == ["claude:one"])
+        let older = try JSONDecoder().decode(Granted.self, from: Data(#"{"rights":[],"refused":[],"unavailable":[],"limits":{},"agents":{"see":"all"}}"#.utf8))
+        #expect(older.listed == nil)
+    }
 }

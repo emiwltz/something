@@ -78,7 +78,7 @@ test("outside something every call rejects with NO_HOST and a sentence", async (
 test("contract is 1 and granted has every key before the engine sets it", () => {
   const { something } = page(() => ({}));
   assert.equal(something.contract, 1);
-  assert.deepEqual(copy(Object.keys(something.granted).sort()), ["agents", "folder", "limits", "refused", "rights", "unavailable"]);
+  assert.deepEqual(copy(Object.keys(something.granted).sort()), ["agents", "folder", "limits", "listed", "refused", "rights", "unavailable"]);
   assert.equal(something.granted.folder, null);
 });
 

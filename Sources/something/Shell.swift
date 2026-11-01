@@ -146,6 +146,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         titleLine.opened = { [weak self] in self?.toggleTitle() }
         info.select = { [weak self] in self?.show(tab: $0) }
         info.showing = { [weak self] in self?.infoShown ?? false }
+        info.told = { [weak self] words, action in self?.toast(words, action: action, quiet: action == nil, seconds: action == nil ? 3.2 : 6) }
         info.counted = { [weak self] count, eyes in
             guard let self else { return }
             agents(count: count, eyes: Info.mood(eyes + [assistant.presence.state]))

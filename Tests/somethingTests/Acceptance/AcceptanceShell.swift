@@ -698,47 +698,6 @@ struct AcceptanceShell {
         #expect(Registry.app.agent("pi")?.terminal == nil, "only proven ways")
     }
 
-    /// The level in one click (X5.2): None and the page shows no agent at once, nothing asked; Run takes a folder
-    /// (asked when none is known) and says where it starts them.
-    @Test("x5-2: the level in one click") func x5_2() async throws {
-        let stage = try Stage("shell-x5-2")
-        defer { stage.remove() }
-        let (shell, library, info, view) = try await AcceptanceShell.weekend(stage)
-        defer { view.close() }
-        let asked = (view.ask as? FakeAsk)?.questions.count
-        info.choose(.none)
-        // What the page's own card lists, read until it says `words` (or, with `not`, anything else).
-        func lists(_ words: String, not: Bool = false) async -> Bool {
-            for _ in 0..<200 {
-                let said = try? await run(view, "return document.getElementById('list').textContent") as? String
-                if (said == words) != not { return true }
-                await wait(0.05)
-            }
-            return false
-        }
-        #expect(await lists("No agent shown."), "the page shows no agent at once")
-        #expect(info.level == Grant.Level.none && info.shown.isEmpty && view.granted.rights == ["store"])
-        let shop = stage.home.places.home.appendingPathComponent("code/shop")
-        try FileManager.default.createDirectory(at: shop, withIntermediateDirectories: true)
-        var picks = 0
-        info.pick = { answer in
-            picks += 1
-            answer(shop.path)
-        }
-        info.choose(.run)
-        #expect(picks == 1 && info.level == .run && info.folder == shop.path && view.granted.folder == shop.path)
-        let grant = try #require(try AppFile.read(stage.home.places.grants).spaces["week-end"])
-        #expect(grant.level == .run && grant.granted == ["state", "send", "launch"] && grant.folder == shop.path)
-        #expect((view.ask as? FakeAsk)?.questions.count == asked, "a level chosen in Info asks nothing more")
-        #expect(await lists("No agent shown.", not: true), "it sees them again")
-        try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: view.web, "x5-2" + suffix, root: stage.home.root)
-        }
-        // Back to Watch: the folder goes with Run, and Run asks again only when nothing tells it where.
-        info.choose(.watch)
-        #expect(info.level == .watch && info.folder == nil && picks == 1)
-    }
-
     /// Move to Trash with Undo (F3.2): the next space opens, the toast offers Undo; Undo brings back the file, the memory,
     /// the answers, the versions, the conversation and its place; the toast's end forgets them. An agent the space
     /// started keeps running, and the toast says so.

@@ -140,7 +140,7 @@ declaration is `{ "contract": 1 }`.
 
 Folders in `agents` are absolute or start with `~`, and match whole path components: `~/code/shop` covers
 `~/code/shop/api` but not `~/code/shopping`. Under a folder scope, an agent whose `folder` is `null` is hidden. The
-agents this space launched are always in scope.
+agents this space launched are always in scope, unless the person hid them.
 
 ## Rights
 
@@ -171,8 +171,8 @@ asks for its level in a window of the Mac at its first opening, pre-set to the h
 asks in the same way, pre-set to None.
 A right above the level is refused without asking again, until the person changes it in the panel beside your space,
 one sentence that applies at once (your page hears `"granted"`). Which agents `state` shows starts as the scope you declare
-in `agents`: keep it to the folders the page is about. The person may then change it: all agents on this Mac or one
-folder. **So never assume a right or an agent: read `something.granted`**, listen to `"granted"` for changes, and take
+in `agents`: keep it to the folders the page is about. The person may then change it beside your space: all agents on
+this Mac, one folder, or a list of their own, hiding an agent from your page or showing it one. **So never assume a right or an agent: read `something.granted`**, listen to `"granted"` for changes, and take
 the agents from the latest state.
 
 Ask for the least: a page that only shows agents needs `state` alone (Watch); a chat with agents it starts itself needs
@@ -188,7 +188,7 @@ returns a promise. A rejected promise carries an `Error` with `.code` (see "Ever
 |---|---|---|
 | `something.contract` | `1` (a property) | none |
 | `something.granted` | Granted (below), a property set before your scripts run | none |
-| `something.state()` | The state | `state` (without it: only the agents this space launched) |
+| `something.state()` | The state | `state` (without it: only the agents this space launched; at None, none) |
 | `something.on(event, fn)` | `"change"`: `fn(state)`; `"granted"`: `fn(granted)`. Returns a function that unsubscribes. | none |
 | `something.send(agent, text, {when, command})` | `{delivery}`: `started`, `steered`, `queued` or `unconfirmed` (below) | `send` |
 | `something.interrupt(agent)` | `{interrupted}`: true, or false if no turn was running. The agent's `queue` is emptied either way, and a steer the agent has not taken in yet is dropped. | `send` |
@@ -259,13 +259,15 @@ if (agent) {
   "unavailable": [],
   "limits": { "amp": ["effort", "interrupt", "mode", "model"], "opencode": ["steer"], "pi": ["mode"], "omp": ["steer"] },
   "agents": { "see": "all" },
-  "folder": "/Users/example/code/shop"
+  "folder": "/Users/example/code/shop",
+  "listed": null
 }
 ```
 
 `rights`: what the person allowed. `refused`: what they refused. `unavailable`: rights something cannot honour.
 `limits`: per kind, what its agents can never do here, so you can hide a button before any agent exists. `agents`: the
-scope in force. `folder`: the folder for launches, or `null`. A right counts for a kind when `rights` holds it plainly
+scope in force. `listed`: `null`, or the person's own list when they chose the agents one by one, as opaque keys; it
+then wins over `agents`, and `state` gives those agents. `folder`: the folder for launches, or `null`. A right counts for a kind when `rights` holds it plainly
 (`send`) or for that kind (`send:claude`).
 
 ## The state
@@ -397,7 +399,7 @@ lives (`alive: null`), an agent shows `unknown`, or `working` when an open turn 
   so it may leave `requests` before your page draws it.
 
 What is outside the scope is absent: agents, and their threads and requests. Without the `state` right, `state()`
-still answers, with only the agents this space launched. Agents seen elsewhere stay listed while alive, and for 24
+still answers, with only the agents this space launched, and none at None. Agents seen elsewhere stay listed while alive, and for 24
 hours after their last activity. There is no history beyond the current conversation's last 10 turns.
 
 ## What each kind can do, and what it cannot

@@ -142,7 +142,8 @@
       "unavailable": ["[string]"],
       "limits": ["{[string]}"],
       "agents": ["SeeAll", "Folders"],
-      "folder": ["string", "null"]
+      "folder": ["string", "null"],
+      "listed": ["[string]", "null"]
     },
     "SeeAll": {
       "see": ["=all"]

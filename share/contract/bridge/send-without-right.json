@@ -28,7 +28,7 @@
     "agents": {
       "see": "all"
     },
-    "folder": "/Users/example/code/shop"
+    "folder": "/Users/example/code/shop", "listed": null
   },
   "request": {
     "contract": 1,

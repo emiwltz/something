@@ -13,14 +13,15 @@ import Testing
 struct AcceptanceAgents {
     /// `name`'s window, the panel open, its page at `level` in `folder`, among the mockup's agents with their folders in
     /// the Stage's home, so that rows read ~/code/shop.
-    private func panel(_ stage: Stage, _ name: String, level: Grant.Level, folder: String) async throws -> (shell: Shell, library: Library, info: Info, view: SpaceView) {
+    private func panel(_ stage: Stage, _ name: String, level: Grant.Level, folder: String?, listed: Bool = false) async throws -> (shell: Shell, library: Library, info: Info, view: SpaceView) {
         try stage.home.space("week-end", AcceptanceShell.weekendPage)
         let (shell, library, info) = stage.window()
-        let home = stage.home.places.home.path, scope = home + "/" + folder
+        let home = stage.home.places.home.path, scope: Scope = folder.map { .folders([home + "/" + $0]) } ?? .all
         let space = try #require(library.entry(name)?.space)
         let declaration = try #require(Declaration.read(space, home: stage.home.places.home, kinds: Registry.app.kinds).declaration)
         try Grants(stage.home.places.grants).update {
-            $0.spaces[name] = Rights.leveled(level, folder: nil, declaration: declaration, at: "2026-10-22T18:00:00Z", after: nil, scope: .folders([scope]))
+            $0.spaces[name] = Rights.leveled(level, folder: nil, declaration: declaration, at: "2026-10-22T18:00:00Z", after: nil, scope: scope)
+            if listed { $0.spaces[name]?.listed = Stage.world(of: name).agents.map(Rights.key) }
         }
         let view = try await stage.open(name, in: shell, library)
         view.engine.update(outside: Self.world(home))
@@ -47,7 +48,7 @@ struct AcceptanceAgents {
     @Test("a1-1: The panel at rest: Agents, Info, History; the button's count") func a1_1() async throws {
         let stage = try Stage("agents-a1-1")
         defer { stage.remove() }
-        let (shell, library, info, view) = try await panel(stage, "week-end", level: .watch, folder: "code/shop")
+        let (shell, library, info, view) = try await panel(stage, "week-end", level: .watch, folder: nil, listed: true)
         defer { view.close() }
         #expect(info.content == .agents && shell.infoShown && (shell.controls[Shell.info] as? ToolButton)?.pressed == true)
         #expect(info.shown.map(\.title) == ["Fix the cart total", "Login form", "Shop tests"], "\(info.shown.map(\.title))")
@@ -74,9 +75,10 @@ struct AcceptanceAgents {
 
         // A word of the sentence applies at once, as the page hears; the list follows.
         var said = info.choice
-        said.scope = .all
+        #expect(said.listed)
+        (said.scope, said.listed) = (.all, false)
         info.say(said)
-        #expect(view.granted.agents == .all && info.shown.count == 11 && info.others.isEmpty, "\(info.shown.count)")
+        #expect(view.granted.agents == .all && view.granted.listed == nil && info.shown.count == 11 && info.others.isEmpty, "\(info.shown.count)")
         said.scope = .folders([stage.home.places.home.path + "/code/shop"])
         info.say(said)
         #expect(try info.shown.count == 3 && AppFile.read(stage.home.places.grants).spaces["week-end"]?.scope == said.scope)
@@ -187,11 +189,107 @@ struct AcceptanceAgents {
     }
 
     @Test("a1-2: Reading a row, each kind of agent", .disabled("not built yet: AG7")) func a1_2() async throws {}
-    @Test("a1-3: At not see: the fallback, Show to This Space, Undo", .disabled("not built yet: AG3")) func a1_3() async throws {}
+    /// The fallback (A1.3): at "not see" the page has nothing, the panel has the whole Mac; Show to This Space raises the
+    /// level and writes the list in one lock, the page getting that agent alone; Undo gives both back. The level changes
+    /// at once in the sentence, and a level chosen there asks nothing.
+    @Test("a1-3: At not see: the fallback, Show to This Space, Undo") func a1_3() async throws {
+        let stage = try Stage("agents-a1-3")
+        defer { stage.remove() }
+        let (shell, library, info, view) = try await panel(stage, "week-end", level: .none, folder: "code/shop")
+        defer { view.close() }
+        let asked = (view.ask as? FakeAsk)?.questions.count
+        #expect(info.shown.isEmpty && info.others.count == 11 && !info.othersFolded && Bridge.visible(view).agents.isEmpty)
+        let none = await AccessibilityTests.walk(shell.inspector.viewController.view) { $0.contains("Show Login form to This Space") }
+        #expect(none.words.contains("This Space Sees") && none.words.contains("Others on This Mac, 11") && none.unnamed.isEmpty, "\(none)")
+        let login = try #require(info.others.first { $0.id == "claude-login" })
+        let grants = Grants(stage.home.places.grants)
+        // The write holds both: at no moment is the file at Watch without its list.
+        info.showHere(login)
+        let raised = try #require(try grants.read().spaces["week-end"])
+        #expect(raised.level == .watch && raised.listed == ["claude:login"] && raised.granted == ["state"])
+        #expect(view.granted.listed == ["claude:login"] && Bridge.visible(view).agents.map(\.id) == ["claude-login"], "only that agent")
+        #expect(info.shown.map(\.id) == ["claude-login"] && info.level == .watch && info.choice.listed && info.raised && info.fresh == ["claude:login"])
+        #expect((view.ask as? FakeAsk)?.questions.count == asked, "it asks nothing")
+        #expect(shell.layer.subviews.compactMap { $0 as? Toast }.last?.words == "Week-end may now watch Login form")
+        try await stage.appearances { suffix in
+            let held = shell.toast("Week-end may now watch Login form", action: Toast.Action(label: "Undo") {}, seconds: 60)
+            try await Picture.window(shell, library: library, web: view.web, "a1-3" + suffix, root: stage.home.root)
+            held.leave(now: true)
+        }
+        // A second agent adds to the list, and changes no level; the words at Run are "talk to".
+        info.showHere(try #require(info.others.first { $0.id == "amp-tests" }))
+        #expect(try grants.read().spaces["week-end"]?.listed == ["claude:login", "amp:tests"] && info.level == .watch)
+        #expect(shell.layer.subviews.compactMap { $0 as? Toast }.last?.words == "Week-end may now watch Shop tests")
+        info.hide(try #require(info.shown.first { $0.id == "amp-tests" }))
+        #expect(try grants.read().spaces["week-end"]?.listed == ["claude:login"])
+        // A level in the sentence applies at once; the list stands until a word ends it.
+        var said = info.choice
+        said.level = .none
+        info.say(said)
+        #expect(Bridge.visible(view).agents.isEmpty && info.shown.isEmpty && view.granted.rights == ["store"])
+        said = info.choice
+        said.level = .watch
+        info.say(said)
+        #expect(info.shown.map(\.id) == ["claude-login"], "the list came back with the level")
+    }
+
+    /// Undo of Show at None puts the level back with the list, and a page without `state` gains nothing.
+    @Test("Undo gives the level and the list back together") func undoTogether() async throws {
+        let stage = try Stage("agents-undo")
+        defer { stage.remove() }
+        let (shell, _, info, view) = try await panel(stage, "week-end", level: .none, folder: "code/shop")
+        defer { view.close() }
+        let grants = Grants(stage.home.places.grants), before = try grants.read().spaces["week-end"]
+        var action: Toast.Action?
+        info.told = { _, undo in action = undo ?? action }
+        info.showHere(try #require(info.others.first { $0.id == "claude-login" }))
+        try #require(action).act()
+        #expect(try grants.read().spaces["week-end"] == before)
+        #expect(info.level == Grant.Level.none && info.shown.isEmpty && Bridge.visible(view).agents.isEmpty && shell.infoShown)
+    }
     @Test("a1-4: Modify: three chips, the ladder, the confirmation", .disabled("not built yet: AG4")) func a1_4() async throws {}
     @Test("a1-5: Talk: one card, its title's menu", .disabled("not built yet: AG5")) func a1_5() async throws {}
     @Test("a1-6: Read: no composer, Go to iTerm", .disabled("not built yet: AG5")) func a1_6() async throws {}
-    @Test("a1-7: Hide: the page loses it, Undo", .disabled("not built yet: AG3")) func a1_7() async throws {}
+    /// Hide (A1.7): under "all your agents" the list starts from what the page sees, the sentence says "these agents", the
+    /// page really loses the agent, which keeps running and moves to Others; its held messages go; Undo brings it back.
+    @Test("a1-7: Hide: the page loses it, Undo") func a1_7() async throws {
+        let stage = try Stage("agents-a1-7")
+        defer { stage.remove() }
+        let (shell, library, info, view) = try await panel(stage, "agents", level: .talk, folder: nil)
+        defer { view.close() }
+        let chase = try #require(info.shown.first { $0.id == "claude-pacman" })
+        #expect(info.shown.count == 11 && info.others.isEmpty && !info.choice.listed)
+        var told: [String] = [], action: Toast.Action?
+        let toast = info.told
+        info.told = { words, undo in
+            told.append(words)
+            action = undo ?? action
+            toast(words, undo)
+        }
+        view.launched.insert(chase.id)
+        info.hide(chase)
+        #expect(told == ["Chase mode hidden from My agents. This space now lists its agents."], "\(told)")
+        #expect(info.choice.listed && info.shown.count == 10 && info.others.map(\.id) == ["claude-pacman"] && info.fresh == ["claude:pacman"])
+        #expect(!view.launched.contains(chase.id) && !Bridge.visible(view).agents.contains { $0.id == chase.id }, "the page has lost it")
+        #expect(view.engine.state.agents.contains { $0.id == chase.id }, "it keeps running")
+        #expect(view.granted.listed?.contains("claude:pacman") == false && view.granted.listed?.count == 10)
+        try await stage.appearances { suffix in
+            let held = shell.toast("Chase mode hidden from My agents", action: Toast.Action(label: "Undo") {}, seconds: 60)
+            try await Picture.window(shell, library: library, web: view.web, "a1-7" + suffix, root: stage.home.root)
+            held.leave(now: true)
+        }
+        try #require(action).act()
+        #expect(told.last == "Chase mode is back in My agents" && view.launched.contains(chase.id) && info.shown.contains { $0.id == chase.id })
+        #expect(!info.choice.listed, "as it was")
+        // A second Hide under a list says nothing of lists, and a word ends the list.
+        info.hide(chase)
+        info.hide(try #require(info.shown.first))
+        #expect(told.last?.hasSuffix("hidden from My agents") == true)
+        var said = info.choice
+        said.listed = false
+        info.say(said)
+        #expect(try Grants(stage.home.places.grants).read().spaces["agents"]?.listed == nil && info.shown.count == 11)
+    }
     @Test("a1-8: + Start: the form, In something", .disabled("not built yet: AG6")) func a1_8() async throws {}
     /// Others on This Mac (A1.9): folded when long; opened, by folder; Look Again says Looking…, what it found with a halo,
     /// then "Nothing new."

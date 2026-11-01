@@ -25,6 +25,9 @@ public struct Grant: Codable, Equatable, Sendable {
     public var scope: Scope?
     /// The one agent Run may start, when the person named it.
     public var start: Start?
+    /// The agents `state` shows when the person chose them one by one, by `Rights.key`: it wins over any scope, and a key
+    /// outlives a launch's id. nil follows the scope.
+    public var listed: [String]?
     public init(declared: Asked, at: String) { (self.declared, self.at) = (declared, at) }
 }
 
@@ -157,13 +160,13 @@ public enum Rights {
     /// others refused, `folder` in force for Run (kept from before when nil). A later declaration asks nothing more: a
     /// right above the level stays refused, and Run's folder is the one chosen, whatever the page then declares. `start`
     /// narrows Run's `launch` to that kind, so that "may start pi" is what the bridge enforces: kept while Run lasts, as
-    /// the folder is, and dropped below it. `scope` replaces the scope in force when given.
+    /// the folder is, and dropped below it. `scope` replaces the scope in force when given, and with it any list.
     public static func leveled(_ level: Grant.Level, folder: String?, declaration: Declaration, at: String, after grant: Grant?,
                                start: Grant.Start? = nil, scope: Scope? = nil) -> Grant {
         var next = grant ?? Grant(declared: Asked(declaration), at: at)
         (next.declared, next.at, next.level) = (Asked(declaration), at, level)
         next.start = level == .run ? start ?? next.start : nil
-        next.scope = scope ?? next.scope
+        if let scope { (next.scope, next.listed) = (scope, nil) }
         (next.granted, next.refused) = (level.words.map { $0 == "launch" ? next.start.map { "launch:" + $0.kind } ?? $0 : $0 }, leveled.filter { !level.words.contains($0) })
         next.folder = level == .run ? folder ?? next.folder : nil
         return next
@@ -198,11 +201,14 @@ public enum Rights {
         return folder.map { path in folders.contains { inside(path, $0) } } ?? false
     }
 
-    /// The state limited to what a space sees: the agents it launched, and those in its scope when it
-    /// holds `state`; the threads and requests of those agents only.
+    /// The state limited to what a space sees: the agents it launched, and when it holds `state` those of the person's
+    /// list, else of its scope; at None nothing, not even what it launched; the threads and requests of those agents only.
     public static func visible(_ state: State, _ granted: Granted, launched: Set<String>) -> State {
-        var state = state, sees = covers(granted.rights, "state")
-        state.agents = state.agents.filter { launched.contains($0.id) || (sees && contains(granted.agents, $0.folder)) }
+        var state = state
+        let sees = covers(granted.rights, "state"), level = ["state", "send", "launch"].contains { word in granted.rights.contains { covers([word], $0) } }
+        state.agents = state.agents.filter { agent in
+            level && (launched.contains(agent.id) || (sees && (granted.listed?.contains(key(agent)) ?? contains(granted.agents, agent.folder))))
+        }
         let ids = Set(state.agents.map(\.id))
         (state.threads, state.requests) = (state.threads.filter { ids.contains($0.agent) }, state.requests.filter { ids.contains($0.agent) })
         return state
@@ -212,7 +218,7 @@ public enum Rights {
     /// each kind cannot do; `~` in the scope is `home`, so a space compares absolute paths only.
     public static func granted(_ reading: DeclarationReading, _ grant: Grant?, limits: [String: [String]], home: URL) -> Granted {
         var granted = Granted()
-        (granted.unavailable, granted.limits, granted.folder) = (reading.unavailable, limits, grant?.folder)
+        (granted.unavailable, granted.limits, granted.folder, granted.listed) = (reading.unavailable, limits, grant?.folder, grant?.listed)
         guard let declaration = reading.declaration else { return granted }
         // A space's memory needs no permission: it never leaves the space.
         let allowed = (grant?.granted ?? []) + ["store"], refused = grant?.refused ?? []

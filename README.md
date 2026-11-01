@@ -156,6 +156,7 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   way, pre-set to "not see". What a space declares above its level stays
   refused, without asking again. Its memory needs no permission: it stays with the space. The panel (⌘I) opens on
   that sentence: a click on a word changes it at once, and the list under it, This Space Sees, is the page's own list.
+  Hide an agent and the page no longer has it, show one and the page has it, each with Undo; neither touches the agent.
   Its Info tab holds the file, its size, Export, its memory, its versions and
   the agent its assistant works with. Settings › Permissions lists every space with its level, and changes one the same
   way; Settings › Permissions › Folders lists each folder your spaces run agents in, with those spaces.

@@ -21,6 +21,8 @@ struct LevelChoice: Equatable {
     var scope: Scope?
     var start: Grant.Start?
     var folder = Folder.none
+    /// Whether it shows a list of the person's own (`Grant.listed`) rather than `scope`.
+    var listed = false
 }
 
 extension LevelChoice {
@@ -233,7 +235,7 @@ struct Sentence: View {
             plain("in")
             ended(Word(text: chosen.place(home: home), label: "Where it starts it", menu: folderMenu, size: size - 0.5, opens: WordSpot.opening))
         default:
-            ended(Word(text: LevelChoice.agents(chosen.scope, home: home), label: "Which agents it shows", menu: scopeMenu, size: size - 0.5, spot: scopeSpot))
+            ended(Word(text: chosen.listed ? "these agents" : LevelChoice.agents(chosen.scope, home: home), label: "Which agents it shows", menu: scopeMenu, size: size - 0.5, spot: scopeSpot))
         }
     }
 
@@ -274,20 +276,27 @@ struct Sentence: View {
     }
 
     var scopeMenu: WordMenu {
-        let scope = choice.wrappedValue.scope
-        return WordMenu(title: "Which agents it shows", rows: [
-            .init(title: "All agents on this Mac", note: "Every one of them, now and later.", on: scope == nil || scope == .all) { choice.wrappedValue.scope = .all },
-            .init(title: "Only in a folder…", note: "Only the agents working in the folder you pick.", on: scope != nil && scope != .all) {
+        let scope = choice.wrappedValue.scope, listed = choice.wrappedValue.listed
+        return WordMenu(title: "Which agents it shows", rows: (listed ? [.init(title: "These agents", note: "The list below.", on: true) {}] : []) + [
+            .init(title: "All agents on this Mac", note: "Every one of them, now and later.", on: !listed && (scope == nil || scope == .all)) { shows(.all) },
+            .init(title: "Only in a folder…", note: "Only the agents working in the folder you pick.", on: !listed && scope != nil && scope != .all) {
                 DispatchQueue.main.async { scopeSpot.open(scopeFolderMenu) }
             },
         ])
+    }
+
+    /// One change, the scope and the end of a list together.
+    private func shows(_ scope: Scope) {
+        var chosen = choice.wrappedValue
+        (chosen.scope, chosen.listed) = (scope, false)
+        choice.wrappedValue = chosen
     }
 
     /// The folders it may show agents from.
     var scopeFolderMenu: WordMenu {
         var shown: [String] = []
         if case .folders(let folders)? = choice.wrappedValue.scope { shown = folders }
-        let pick = { (folder: String) in choice.wrappedValue.scope = .folders([folder]) }
+        let pick = { (folder: String) in shows(.folders([folder])) }
         return WordMenu(title: "Which folder", rows: rows(known: shown, on: shown.first, pick) + [choose(pick)])
     }
 

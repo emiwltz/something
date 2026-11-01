@@ -27,6 +27,8 @@ import SwiftUI
     @ObservationIgnored var select: (Content) -> Void = { _ in }
     /// Hears how many agents the page sees and what their eyes say, at each reading: the window's panel button.
     @ObservationIgnored var counted: (Int, [Sign.State]) -> Void = { _, _ in }
+    /// Says a change of the page's list, with its Undo: the window's toast.
+    @ObservationIgnored var told: (String, Toast.Action?) -> Void = { _, _ in }
     /// Whether the panel shows: closed, only what its button counts is read.
     @ObservationIgnored var showing: () -> Bool = { true }
     /// Asks the person for Run's folder and gives it on; a test answers in its place.
@@ -46,6 +48,8 @@ import SwiftUI
     private var declared: String?
     /// Which agents it shows, the one agent it may start, and the kinds its page declares it starts.
     private var scope: Scope?
+    /// The person's own list, by key.
+    private var listed: [String]?
     private var start: Grant.Start?
     private(set) var kinds: [String] = []
     /// The sentence while Run waits for its folder: nothing is granted until then.
@@ -68,6 +72,8 @@ import SwiftUI
     private(set) var warning: String?
     /// The launched agents leaving for Terminal, by id, from the click on: each goes once. Ids are not reused in a run.
     private(set) var moving: Set<String> = []
+    /// Whether the sentence just rose, for its glow.
+    private(set) var raised = false
     /// Whether Look Again is at work; what it found; and the rows of what it found, by key, for their halo.
     private(set) var looking = false
     private(set) var said: String?
@@ -98,7 +104,7 @@ import SwiftUI
         self.space = space
         history.show(space)
         (about, level, folder, problem, changed, size, rules) = (nil, nil, nil, nil, nil, nil, [])
-        (declared, scope, start, kinds, draft) = (nil, nil, nil, [], nil)
+        (declared, scope, listed, start, kinds, draft) = (nil, nil, nil, nil, [], nil)
         defer { refresh() }
         guard let space else { return }
         let reading = Declaration.read(space, home: places.home, kinds: Registry.app.kinds), declaration = reading.declaration
@@ -108,7 +114,7 @@ import SwiftUI
             declared = Levels.onThisMac(declaration.folder, home: places.home)
             do {
                 let grant = try Grants(places.grants).read().spaces[space.name]
-                (level, folder, rules, start) = (grant.map(Rights.level(of:)) ?? Grant.Level.none, grant?.folder, grant?.rules ?? [], grant?.start)
+                (level, folder, rules, start, listed) = (grant.map(Rights.level(of:)) ?? Grant.Level.none, grant?.folder, grant?.rules ?? [], grant?.start, grant?.listed)
                 scope = Rights.granted(reading, grant, limits: [:], home: places.home).agents
             } catch {
                 problem = error.sentence
@@ -150,7 +156,7 @@ import SwiftUI
     /// so that choosing Run opens no menu when it is already known.
     var choice: LevelChoice {
         draft ?? LevelChoice(level: level ?? .none, scope: scope, start: start ?? (kinds.count == 1 ? Grant.Start(kind: kinds[0]) : nil),
-                             folder: (folder ?? declared).map { .path($0) } ?? .none)
+                             folder: (folder ?? declared).map { .path($0) } ?? .none, listed: listed != nil)
     }
 
     /// The person changed a word of the sentence: it applies at once, but for Run, which waits for its folder.
@@ -161,8 +167,10 @@ import SwiftUI
             return refresh()
         }
         draft = nil
+        // A word that ends the list sets a scope, even the one under it: `Rights.leveled` then drops the list.
+        let ends = !chosen.listed && listed != nil
         choose(chosen.level, folder: chosen.folder == .blank ? places.blank(space.name) : chosen.folder.path, start: chosen.start,
-               scope: chosen.scope == scope ? nil : chosen.scope)
+               scope: chosen.scope == scope && !ends ? nil : chosen.scope)
     }
 
     /// Look Again: reads the Mac now, then says what it found since this look began, its rows lit for a moment.
@@ -185,9 +193,20 @@ import SwiftUI
             } ?? "Nothing new."
             guard !found.isEmpty else { return }
             if !Set(others.map(\.key)).isDisjoint(with: found.map(\.key)) { othersOpen = true }
-            fresh = Set(found.map(\.key))
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.9) { [weak self] in self?.fresh = [] }
+            lit(found.map(\.key))
         }
+    }
+
+    /// Lights rows for a moment, by key.
+    func lit(_ keys: [String]) {
+        fresh.formUnion(keys)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.9) { [weak self] in self?.fresh.subtract(keys) }
+    }
+
+    /// The sentence glows for a moment: it changed by a gesture elsewhere.
+    func raise() {
+        raised = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.9) { [weak self] in self?.raised = false }
     }
 
     /// Others by folder, each folder where its first agent stands; agents whose folder is unknown make one group.
@@ -310,7 +329,7 @@ import SwiftUI
     }
 
     /// The open space's view, when it is the one shown here.
-    private func open() -> SpaceView? { current().flatMap { $0.space.name == space?.name ? $0 : nil } }
+    func open() -> SpaceView? { current().flatMap { $0.space.name == space?.name ? $0 : nil } }
 }
 
 /// The panel's controller: ↑ ↓ move History's choice, and Space held shows it

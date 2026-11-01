@@ -21,6 +21,95 @@ struct MiniEyes: View {
     }
 }
 
+extension Info {
+    /// Hide from This Space: the page loses `reading` at once, and only that. It keeps running; what the page held for it
+    /// is dropped, or the page's words would reach it after the person took the link away. Under a scope, the list starts
+    /// as what the page sees now. Its requests still reach the person, and its rules stay.
+    func hide(_ reading: AgentReading) {
+        guard let view = open(), let name = space?.name else { return }
+        refresh()
+        let seen = shown.map(\.key), title = space.flatMap { Declaration.read($0, home: places.home, kinds: Registry.app.kinds).declaration?.title } ?? name
+        var wide = false
+        let before = write(name) { grant, _ in
+            wide = grant.listed == nil
+            grant.listed = (grant.listed ?? seen).filter { $0 != reading.key }
+        }
+        guard let before else { return }
+        let launched = view.launched.remove(reading.id) != nil
+        view.engine.dropHeld(reading.id)
+        settle(view, [reading.key])
+        (opened, othersOpen) = (nil, true)
+        told("\(reading.title) hidden from \(title)\(wide ? ". This space now lists its agents." : "")", undo(before, name) { [weak self] in
+            if launched { view.launched.insert(reading.id) }
+            self?.told("\(reading.title) is back in \(title)", nil)
+        })
+    }
+
+    /// Show to This Space: the page gets `reading`, and no more. At None the level rises to Watch in the same write as the
+    /// list, or a page that declares every agent would see them all between the two. A right the page did not declare stays
+    /// out, and a page without `state` still shows nothing.
+    func showHere(_ reading: AgentReading) {
+        guard let view = open(), let name = space?.name, let level else { return }
+        refresh()
+        let seen = shown.map(\.key), title = space.flatMap { Declaration.read($0, home: places.home, kinds: Registry.app.kinds).declaration?.title } ?? name
+        let before = write(name) { grant, raised in
+            if level == .none { grant = raised(grant) }
+            grant.listed = level == .none ? [reading.key] : (grant.listed ?? seen).filter { $0 != reading.key } + [reading.key]
+        }
+        guard let before else { return }
+        settle(view, [reading.key])
+        opened = nil
+        if level == .none { raise() }
+        told("\(title) may now \((level == .none ? Grant.Level.watch : level == .run ? .talk : level).word) \(reading.title)", undo(before, name) { [weak self] in
+            self?.told("\(title) no longer sees \(reading.title)", nil)
+        })
+    }
+
+    /// One write under the grants lock, so the page never sees a level without its list. `change` gets the grant and what
+    /// raises it to Watch. Returns the grant as it was (itself optional, none before), or nil when it could not be written,
+    /// which it says.
+    private func write(_ name: String, _ change: (inout Grant, (Grant) -> Grant) -> Void) -> Grant?? {
+        guard let space, let declaration = Declaration.read(space, home: places.home, kinds: Registry.app.kinds).declaration else { return nil }
+        let at = iso8601.string(from: clock())
+        var before: Grant?
+        do {
+            try Grants(places.grants).update { file in
+                before = file.spaces[name]
+                var grant = before ?? Rights.leveled(.none, folder: nil, declaration: declaration, at: at, after: nil)
+                change(&grant) { Rights.leveled(.watch, folder: nil, declaration: declaration, at: at, after: $0) }
+                file.spaces[name] = grant
+            }
+        } catch {
+            ask.tell(error.sentence)
+            return nil
+        }
+        return .some(before)
+    }
+
+    /// Undo: the level and the list as they were, together; a rule kept since stays. Then `after`, and the rows light.
+    private func undo(_ before: Grant?, _ name: String, after: @escaping () -> Void) -> Toast.Action {
+        Toast.Action(label: "Undo") { [weak self] in
+            guard let self else { return }
+            do {
+                try Grants(places.grants).update { file in
+                    var back = before
+                    back?.rules = file.spaces[name]?.rules
+                    file.spaces[name] = back
+                }
+            } catch { return ask.tell(error.sentence) }
+            if space?.name == name, let view = open() { settle(view, []) }
+            after()
+        }
+    }
+
+    /// The space hears its grant, once, and the panel reads it; `keys` light.
+    private func settle(_ view: SpaceView, _ keys: [String]) {
+        view.regrant()
+        show(space)
+        lit(keys)
+    }
+}
+
 struct AgentsPanel: View {
     @Bindable var info: Info
     let assistant: AssistantModel
@@ -34,6 +123,8 @@ struct AgentsPanel: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     section(top: 10) { sentence }
+                        .background(Look.Token.sel.ui.opacity(info.raised ? 1 : 0))
+                        .animation(info.raised || Look.motion(motion) == .reduced ? nil : .easeOut(duration: 1.7), value: info.raised)
                     if assistant.place.space == info.space?.name { section { assistantRow } }
                     section { sees }
                     section { others }
@@ -141,10 +232,14 @@ struct AgentsPanel: View {
         let under = [reading.named ? reading.program : nil, folder].compactMap { $0 }.joined(separator: " · ")
         let helpers = reading.agent.subagents?.filter { $0.status == "running" }.count ?? 0
         return AgentRow(info: info, id: reading.id, title: reading.title, helpers: helpers, word: reading.word, under: under, tag: reading.tag,
-                        ended: reading.phase == .ended, fresh: info.fresh.contains(reading.key), motion: motion) {
+                        ended: reading.phase == .ended, fresh: info.fresh.contains(reading.key), motion: motion,
+                        show: out && info.level != nil ? { info.showHere(reading) } : nil) {
             MiniEyes(state: reading.eyes).frame(width: 18, height: 18).accessibilityHidden(true)
         } details: {
-            controlled(reading)
+            VStack(alignment: .leading, spacing: 9) {
+                controlled(reading)
+                if !out { hide(reading) }
+            }
         }
         .id(reading.key)
     }
@@ -182,6 +277,23 @@ struct AgentsPanel: View {
         }
     }
 
+    /// Hide from This Space: alone on an agent that offers nothing else, else in its `…`, where its other actions join it.
+    @ViewBuilder private func hide(_ reading: AgentReading) -> some View {
+        if reading.phase == .seen {
+            Button("Hide from This Space") { info.hide(reading) }.buttonStyle(Secondary(height: 28)).font(Look.font(.ui, size: 12, weight: .medium).ui)
+                .frame(maxWidth: .infinity)
+        } else {
+            HStack {
+                Spacer(minLength: 0)
+                Menu { Button("Hide from This Space") { info.hide(reading) } } label: {
+                    Image(systemName: "ellipsis").font(.system(size: 12)).foregroundStyle(Look.Token.ink2.ui).frame(width: 28, height: 28)
+                        .boxed(RoundedRectangle(cornerRadius: 7), .clear, ring: Look.Token.line.ui).contentShape(Rectangle())
+                }
+                .plainMenu().fixedSize().accessibilityLabel("More for \(reading.title)")
+            }
+        }
+    }
+
     /// A part of the tab, above a line.
     private func section(top: CGFloat = 13, @ViewBuilder _ content: () -> some View) -> some View {
         content().padding(EdgeInsets(top: top, leading: 12, bottom: 13, trailing: 12)).frame(maxWidth: .infinity, alignment: .leading)
@@ -209,6 +321,8 @@ private struct AgentRow<Mark: View, Details: View>: View {
     var helpers = 0
     let word: String, under: String, tag: String?
     var ended = false, fresh = false, motion = Look.Motion.calm
+    /// Show to This Space, on a row of Others: over the tag on hover, and on an opened row.
+    var show: (() -> Void)? = nil
     @ViewBuilder let mark: Mark
     @ViewBuilder let details: Details
 
@@ -217,10 +331,18 @@ private struct AgentRow<Mark: View, Details: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             Button { info.opened = opened ? nil : id } label: { head(opened) }
                 .buttonStyle(.plain)
-                .onHover { info.hovered = $0 ? id : info.hovered == id ? nil : info.hovered }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(([title, word, under, tag].compactMap { $0 }.filter { !$0.isEmpty } + (helpers > 0 ? [helpersWords] : [])).joined(separator: ", "))
                 .accessibilityValue(opened ? "Opened" : "Closed")
+                .overlay(alignment: .bottomTrailing) {
+                    if let show {
+                        Button("Show to This Space", action: show).buttonStyle(.plain).font(Look.font(.ui, size: 11.5, weight: .medium).ui).foregroundStyle(Look.Token.ink.ui)
+                            .padding(.horizontal, 5).frame(height: 20).background(Look.Token.bg.ui, in: RoundedRectangle(cornerRadius: 5))
+                            .opacity(revealed ? 1 : 0).allowsHitTesting(revealed).padding(EdgeInsets(top: 0, leading: 0, bottom: 5, trailing: 2))
+                            .accessibilityLabel("Show \(title) to This Space")
+                    }
+                }
+                .onHover { info.hovered = $0 ? id : info.hovered == id ? nil : info.hovered }
             if opened {
                 Rectangle().fill(Look.Token.line.ui).frame(height: 1)
                 details.padding(EdgeInsets(top: 7, leading: 8, bottom: 9, trailing: 8)).frame(maxWidth: .infinity, alignment: .leading)
@@ -230,6 +352,8 @@ private struct AgentRow<Mark: View, Details: View>: View {
         .overlay { if opened { shape.strokeBorder(Look.Token.line.ui) } }
         .animation(fresh || Look.motion(motion) == .reduced ? nil : .easeOut(duration: 1.8), value: fresh)
     }
+
+    private var revealed: Bool { info.hovered == id || info.opened == id }
 
     private var helpersWords: String { "+\(helpers) helper\(helpers == 1 ? "" : "s")" }
 
@@ -248,7 +372,7 @@ private struct AgentRow<Mark: View, Details: View>: View {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(under).font(Look.font(.ui, size: 11).ui).foregroundStyle(Look.Token.ink3.ui).lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 0)
-                    if let tag { Text(tag).font(Look.font(.ui, size: 11).ui).foregroundStyle(Look.Token.ink2.ui).fixedSize() }
+                    if let tag { Text(tag).font(Look.font(.ui, size: 11).ui).foregroundStyle(Look.Token.ink2.ui).fixedSize().opacity(show != nil && revealed ? 0 : 1) }
                 }
             }
         }

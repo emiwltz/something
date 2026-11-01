@@ -226,6 +226,8 @@ public struct Granted: Codable, Equatable, Sendable, EveryKey {
     public var limits: [String: [String]] = [:]
     public var agents: Scope = .folders([])
     public var folder: String?
+    /// The person's own list, as opaque keys, when they chose the agents one by one: it wins over `agents`.
+    public var listed: [String]?
     public init() {}
 }
 

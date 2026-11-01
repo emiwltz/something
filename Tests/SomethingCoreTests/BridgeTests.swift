@@ -174,6 +174,14 @@ struct BridgeTests {
         #expect(code("send", ["agent": "a1", "text": "Add a footer."], host) == "NOT_SUPPORTED")
     }
 
+    /// Hidden by the person, an agent is absent: the same answer as out of scope, nothing to probe.
+    @Test func aHiddenAgentIsNotFound() throws {
+        let host = try FakeHost(["state", "send"])
+        host.granted.listed = []
+        #expect(code("send", ["agent": "a1", "text": "Hello."], host) == "AGENT_NOT_FOUND")
+        #expect(code("interrupt", ["agent": "a1"], host) == "AGENT_NOT_FOUND")
+    }
+
     @Test func withoutTheStateRightOnlyItsOwnAgentsExist() throws {
         let host = try FakeHost(["send"])
         #expect(code("send", ["agent": "a1", "text": "Hello."], host) == "AGENT_NOT_FOUND")

@@ -291,6 +291,18 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
     let at = "2026-10-17T09:00:00Z"
     func fresh() -> HeldQueue { HeldQueue(Fold(Agent(id: "a1", kind: "claude", origin: "launched"))) }
 
+    /// What a page held goes, the turn runs on, and nothing comes at its end.
+    @Test func droppedMessagesNeverArrive() async throws {
+        var queue = fresh()
+        _ = try queue.send("Hello.", when: "next", at: at)
+        _ = queue.record(.turnStarted(id: "t1"), at: at)
+        _ = try queue.send("Then the tests.", when: "next", at: at)
+        queue.drop()
+        #expect(queue.fold.agent.queue.isEmpty)
+        #expect(try queue.send("Now.", when: "now", at: at) == .steered, "the turn is still open")
+        #expect(queue.record(.turnEnded(.done), at: at) == nil)
+    }
+
     @Test func nextWaitsForTheEndOfTheTurnAndNowSteers() async throws {
         var queue = fresh()
         #expect(try queue.send("Hello.", when: "next", at: at) == .started)

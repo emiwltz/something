@@ -401,12 +401,24 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     func push() {
         guard blocked.isEmpty, let frame else { return }
         let state = Bridge.visible(self)
+        if keepListed(state) { return }
         var bare = state
         // `at` changes at every reading; only a change of what the space sees is worth a push.
         bare.at = ""
         guard bare != pushed, let data = try? state.json() else { return }
         pushed = bare
         SpaceView.push(data, in: web, frame: frame)
+    }
+
+    /// An agent this space launched under the person's list joins it once its key is known: a key outlives the id that
+    /// shows it now. Hidden ones left `launched`, so none comes back. Returns whether it wrote: `regrant` has pushed.
+    private func keepListed(_ state: SomethingCore.State) -> Bool {
+        guard !readOnly, let listed = granted.listed else { return false }
+        let known = state.agents.filter { launched.contains($0.id) && $0.thread != nil }.map(Rights.key).filter { !listed.contains($0) }
+        guard !known.isEmpty else { return false }
+        do { try Grants(places.grants).update { $0.spaces[space.name]?.listed?.append(contentsOf: known) } } catch { ask.tell(error.sentence) }
+        regrant()
+        return true
     }
 
     /// `granted` as the JSON the page receives.
