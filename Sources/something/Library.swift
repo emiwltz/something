@@ -330,7 +330,7 @@ import SomethingCore
             carries = answer
         }
         do {
-            let memory = carries ? try Export.memory(space.name, in: places.data) : nil
+            let memory = carries ? try Library.carried(space.name, in: places.data) : nil
             let script = { (file: String) in
                 do { return try String(contentsOf: self.share.appendingPathComponent(file), encoding: .utf8) } catch {
                     throw SpaceError("\(file) cannot be read in \(self.share.path): \(error.localizedDescription)")
@@ -347,13 +347,32 @@ import SomethingCore
                 throw SpaceError("The export could not be written to \(Words.path(url.path, home: places.home.path)): \(error.localizedDescription)")
             }
             exported(url, carries)
-            let links = Export.links(space)
+            let links = Library.links(space)
             if !links.isEmpty {
                 ask.tell("\(title) was exported without \(links.joined(separator: ", ")): a link to somewhere else is never exported. Replace a link with the file itself to export it.")
             }
         } catch {
             ask.tell("\(title) was not exported. \(error.sentence)")
         }
+    }
+
+    /// The paths of the links in a folder space, sorted: what its export leaves out. A file space has none here (a
+    /// linked one is refused whole). Hidden paths are not part of the space and are not listed.
+    private static func links(_ space: Space) -> [String] {
+        guard space.form == .folder else { return [] }
+        let paths = FileManager.default.enumerator(atPath: space.location.path)?.allObjects as? [String] ?? []
+        return paths.filter { !$0.split(separator: "/").contains { $0.hasPrefix(".") } && Versions.isLink(space.location.appendingPathComponent($0)) }.sorted()
+    }
+
+    /// The memory of the space `name`, as an export may carry it; nil when it is empty. Throws a `SpaceError` when the
+    /// memory file is a link (it could lead to an agent's file) or not a JSON object.
+    private static func carried(_ name: String, in folder: URL) throws -> [String: Any]? {
+        let memory = Memory(folder: folder, space: name)
+        guard !Versions.isLink(memory.file) else {
+            throw SpaceError("\(memory.file.path) is a link to somewhere else; something exports only a space's own memory.")
+        }
+        let whole = try memory.get("") as? [String: Any] ?? [:]
+        return whole.isEmpty ? nil : whole
     }
 
     /// Shows `template`'s own file in the Finder.

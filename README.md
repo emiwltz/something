@@ -119,9 +119,9 @@ commands without asking; everything else it does asks you, as your agent’s own
 Your assistant is the agent you chose, working in `~/something/spaces`. Each space has its own: its own conversation
 with that agent, started at its first message and shown when the space is open. New Space has one too, and the space it
 makes keeps that conversation; a space moved to the Trash takes its conversation with it, once its Undo is gone.
-something lends it three of
-its own commands as tools (`something_guide`, `something_new`, `something_check`) through `something mcp`, an MCP server
-(Model Context Protocol, the standard way to give an agent tools) that the agent starts for that conversation only; pi
+something lends it three of its own commands as tools (`something_guide`, `something_new`, `something_check`) through
+`something mcp`, an MCP server (Model Context Protocol, the standard way to give an agent tools) that the agent starts
+for that conversation only; pi
 runs them in its shell instead. What "without asking" means for each:
 
 - **Claude Code**: edits and writes in `~/something/spaces`, and those three tools. Anything else asks you.

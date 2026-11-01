@@ -265,7 +265,7 @@ struct Versions {
     /// Whether `space` is light enough to be versioned: what an export carries.
     private static func fits(_ space: Space) -> Bool { let size = space.size(); return size.bytes <= most && size.files <= Export.most }
 
-    private static func isLink(_ url: URL) -> Bool { (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true }
+    static func isLink(_ url: URL) -> Bool { (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true }
 
     private func size(_ name: String, _ hash: String) -> Int {
         (try? blob(name, hash).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0

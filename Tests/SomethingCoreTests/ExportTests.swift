@@ -86,7 +86,7 @@ import Testing
         let pages: [Data] = [
             "<!doctype html><title>Invented</title>", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\">\r\n<html lang=\"fr\"><body>é\r\n</body></html>\r\n",
             "<p>No doctype, no newline at its end</p>", "\u{FEFF}<!doctype html><p>A byte order mark</p>", "  \n<!-- Before -->\n<!doctype html>\n<p>A comment first</p>",
-            "<!-- not closed", "<!doctype html", "", "\n", "<!doctype html><!-- something export -->\n<p>Its marks in the page</p><!-- /something export -->\n",
+            "<!-- not closed", "<!doctype html", "<!-- a --!><html><body><p>x</p><!-- b -->", "", "\n", "<!doctype html><!-- something export -->\n<p>Its marks in the page</p><!-- /something export -->\n",
             "<!-- something export -->\n<p>A mark first</p>", "<script>document.write('</script>')</script>", "<!doctype html><script type=\"application/json\" id=\"something-export\">{}</script>",
         ].map { Data($0.utf8) } + [Data([0x3C, 0x70, 0x3E, 0xFF, 0xFE, 0x00, 0x80])]
         for (index, page) in pages.enumerated() {
@@ -124,6 +124,25 @@ import Testing
             #expect(try Data(contentsOf: placed.location.appendingPathComponent(file)) == Data(contentsOf: space.location.appendingPathComponent(file)))
         }
         #expect(try Memory(folder: to.data, space: "board").get("seen") as? [String] == ["a1"])
+    }
+
+    @Test func aFileThatCouldNotComeBackIsRefused() throws {
+        let from = Place()
+        defer { from.remove() }
+        // Each "<" of the memory weighs six bytes in the block, and the document does not see it.
+        try from.write("<!doctype html><title>Invented</title>", "something/spaces/note.html")
+        let space = try #require(from.spaces.named("note"))
+        let memory = ["note": String(repeating: "<", count: 4_000_000)]
+        #expect(throws: SpaceError.self) { try Export.page(space, data: memory, app: "1.0.0-test", bridge: "", offline: "") }
+    }
+
+    /// The block ends a comment as HTML does, so the policy stays in the head.
+    @Test func theBlockStandsPastACommentClosedTheOddWay() throws {
+        let from = Place()
+        defer { from.remove() }
+        try from.write("<!-- a --!><html><body><p>x</p><!-- b -->", "something/spaces/odd.html")
+        let page = try Export.page(try #require(from.spaces.named("odd")), data: nil, app: "1.0.0-test", bridge: "", offline: "")
+        #expect(String(decoding: page, as: UTF8.self).hasPrefix("<!-- a --!><!-- something export -->"))
     }
 
     /// `Export.unwrap` only gives back a document: everything `read` refuses, it still refuses.
@@ -214,12 +233,11 @@ import Testing
         try from.write("<!doctype html><title>Invented</title>", "something/spaces/today.html")
         try Memory(folder: from.data, space: "today").set("done", ["Water the invented plant"])
         let space = try #require(from.spaces.named("today"))
-        let data = try #require(try Export.memory("today", in: from.data))
+        let data: [String: Any] = ["done": ["Water the invented plant"]]
         let placed = try place(try Export.read(try Export.document(space, data: data, app: "1.0.0-test")), to)
         #expect(placed.form == .file && placed.name == "today")
         #expect(try Data(contentsOf: placed.location) == Data(contentsOf: space.location))
         #expect(try Memory(folder: to.data, space: "today").get("done") as? [String] == ["Water the invented plant"])
-        #expect(try Export.memory("nothing", in: from.data) == nil, "no memory: nothing to carry")
     }
 
     @Test func anExportTooBigOrWithTooManyFilesIsRefusedBeforeItIsSaved() throws {
@@ -296,11 +314,10 @@ import Testing
         try Memory(folder: place.data, space: "board").set("seen", ["a1"])
 
         let space = try #require(place.spaces.named("board"))
-        let data = try #require(try Export.memory("board", in: place.data))
+        let data: [String: Any] = ["seen": ["a1"]]
         let document = try Export.document(space, data: data, app: "1.0.0-test")
         let received = try Export.read(document)
         #expect(received.files.keys.sorted() == ["index.html"])
-        #expect(Export.links(space) == ["claude", "session.jsonl"], "what was left out can be named")
         let everything = [document] + Array(received.files.values) + [try JSONSerialization.data(withJSONObject: received.data ?? [:])]
         for bytes in everything { #expect(!String(decoding: bytes, as: UTF8.self).contains("planted-7f3c")) }
 
@@ -316,11 +333,5 @@ import Testing
                                                    withDestinationURL: place.root.appendingPathComponent(session))
         let relay = try #require(place.spaces.named("relay"))
         #expect(throws: SpaceError.self) { try Export.document(relay, data: nil, app: "1.0.0-test") }
-
-        // A memory that is a link to an agent's file (an invented ~/.claude.json) is refused, not read.
-        try place.write("{\"projects\": {\"note\": \"\(planted)\"}}", ".claude.json")
-        try FileManager.default.createSymbolicLink(at: place.data.appendingPathComponent("relay.json"),
-                                                   withDestinationURL: place.root.appendingPathComponent(".claude.json"))
-        #expect(throws: SpaceError.self) { try Export.memory("relay", in: place.data) }
     }
 }

@@ -17,16 +17,16 @@ final class TrashUndo {
         let ids = shell.assistant.launches.ids[name] ?? [], state = shell.assistant.engine.state
         // Only the title is read, so no parent of any process is walked.
         let runs = RunsIn { _ in [] }
-        return state.agents.filter { ids.contains($0.id) && $0.alive != false }.map { agent in
+        return state.agents.filter { ids.contains($0.id) && $0.alive == true }.map { agent in
             AgentReading(agent, thread: state.threads.first { $0.agent == agent.id }, runs: runs).title
         }
     }
 
     /// Moves `entry` to the Trash and offers Undo. A failure is said, and everything stays.
     func move(_ entry: Library.Entry) {
-        finish()
         let name = entry.id, agents = running(name)
         guard let trashed = shell.library.trash(name) else { return }
+        finish()
         shell.assistant.leave(name)
         let kept = agents.count == 1 ? " · \(agents[0]) keeps running" : agents.isEmpty ? "" : " · \(agents.count) agents keep running"
         let toast = shell.toast("\(trashed.title) is in the Trash\(kept)", action: Toast.Action(label: "Undo") { [weak self] in self?.undo(trashed) },
@@ -50,8 +50,9 @@ final class TrashUndo {
     }
 
     private func forget(_ trashed: Library.Trashed) {
-        // A space made under that name meanwhile began anew, and what it has is its own.
-        guard shell.library.entry(trashed.name) == nil else { return }
+        // Put back from the Trash in Finder: it is the same space, and keeps what it left.
+        let files = FileManager.default
+        guard !files.fileExists(atPath: trashed.page.home.path) || files.fileExists(atPath: trashed.page.trash.path) else { return }
         shell.library.forget(trashed)
         shell.assistant.forget(trashed.name)
         shell.forget(trashed.name)

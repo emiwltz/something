@@ -2,7 +2,7 @@
 // refused with NO_HOST, and a page written to the guide hides what needs agents. Its memory works over the `data` the
 // file carries, kept in this browser. A folder's other files, which the file carries too, become blob URLs: each `src`
 // and `href` is rewritten as the parser adds it, and `fetch` answers for those paths. An image or a font named inside a
-// stylesheet stays empty. Inside something it does nothing: the real bridge is there.
+// stylesheet, a file a module imports or `srcset` names, `XMLHttpRequest` and a worker stay empty. Inside something it does nothing: the real bridge is there.
 (function () {
   "use strict";
   const base = window.something, webkit = window.webkit;

@@ -57,8 +57,8 @@ public enum Export {
     }
 
     /// The one HTML file for `space`: its page with the block after its doctype. The block holds what `document` gives,
-    /// less the page's own bytes, so what a browser shows is what an import brings in; `bridge` and `offline` are the
-    /// texts of something.js and offline.js. Throws as `document` does.
+    /// less the page's own bytes, so an export's page is the page that comes in; `bridge` and `offline` are the texts
+    /// of something.js and offline.js. Throws as `document` does, and when the file could not be imported back.
     public static func page(_ space: Space, data: [String: Any]?, app: String, bridge: String, offline: String, at: Date = Date()) throws -> Data {
         let path = space.form == .file ? "\(space.name).html" : "index.html"
         guard var object = try JSONSerialization.jsonObject(with: try document(space, data: data, app: app, at: at)) as? [String: Any],
@@ -79,15 +79,18 @@ public enum Export {
             <!-- /something export -->
 
             """
-        let at = opening(of: page)
-        return Data(page[..<at]) + Data(block.utf8) + Data(page[at...])
+        let at = opening(of: page), html = Data(page[..<at]) + Data(block.utf8) + Data(page[at...])
+        guard html.count <= fileLimit else {
+            throw SpaceError("The export of \(space.name) would weigh \(Size.words(html.count)); an import takes at most 20 MB, about 15 MB of files.")
+        }
+        return html
     }
 
     /// The `.something` document an HTML file from `page` holds, its page put back byte for byte, for `read`; nil when
     /// the file has no block, or one that does not read: then it is a plain page.
     public static func unwrap(_ html: Data) -> Data? {
         // Its files are lighter here than in base64, so past this the document could not be read either.
-        guard html.count <= limit + 1_000_000 else { return nil }
+        guard html.count <= fileLimit else { return nil }
         let at = opening(of: html)
         guard html[at...].starts(with: begin), let end = html.range(of: Data("<!-- /something export -->\n".utf8), in: at..<html.endIndex),
               let from = html.range(of: Data(opener.utf8), in: at..<end.lowerBound),
@@ -99,7 +102,8 @@ public enum Export {
         return try? JSONSerialization.data(withJSONObject: object)
     }
 
-    private static let begin = Data("<!-- something export -->\n".utf8), opener = "<script type=\"application/json\" id=\"something-export\">"
+    /// The most an HTML file may weigh: `limit`, and room for its scripts.
+    private static let fileLimit = limit + 1_000_000, begin = Data("<!-- something export -->\n".utf8), opener = "<script type=\"application/json\" id=\"something-export\">"
 
     /// Where the block goes in `page`, or stands in a file made from one: past a byte order mark, white space, comments
     /// and the doctype, since anything else before a doctype would turn the page to quirks mode. HTML allows the place:
@@ -110,7 +114,9 @@ public enum Export {
             while at < page.endIndex, [0x09, 0x0A, 0x0C, 0x0D, 0x20].contains(page[at]) { at += 1 }
             let rest = page[at...]
             if rest.starts(with: begin) { return at }
-            if rest.starts(with: Data("<!--".utf8)), let end = page.range(of: Data("-->".utf8), in: at..<page.endIndex) {
+            // HTML ends a comment at "--!>" too, and a block past one would land in the body, where no policy counts.
+            let ends = ["-->", "--!>"].compactMap { page.range(of: Data($0.utf8), in: at..<page.endIndex) }
+            if rest.starts(with: Data("<!--".utf8)), let end = ends.min(by: { $0.lowerBound < $1.lowerBound }) {
                 at = end.upperBound
             } else if String(decoding: rest.prefix(9), as: UTF8.self).lowercased() == "<!doctype", let end = rest.firstIndex(of: 0x3E) {
                 return end + 1
@@ -118,25 +124,6 @@ public enum Export {
                 return at
             }
         }
-    }
-
-    /// The paths of the links in a folder space, sorted: what its export leaves out. A file space has none here (a
-    /// linked one is refused whole). Hidden paths are not part of the space and are not listed.
-    public static func links(_ space: Space) -> [String] {
-        guard space.form == .folder else { return [] }
-        let paths = FileManager.default.enumerator(atPath: space.location.path)?.allObjects as? [String] ?? []
-        return paths.filter { !$0.split(separator: "/").contains { $0.hasPrefix(".") } && isLink(space.location.appendingPathComponent($0)) }.sorted()
-    }
-
-    /// The memory of the space `name` in `folder`, as an export may carry it; nil when it is empty or there is none.
-    /// Throws a `SpaceError` when the memory file is a link (it could lead to an agent's file) or not a JSON object.
-    public static func memory(_ name: String, in folder: URL) throws -> [String: Any]? {
-        let memory = Memory(folder: folder, space: name)
-        guard !isLink(memory.file) else {
-            throw SpaceError("\(memory.file.path) is a link to somewhere else; something exports only a space's own memory.")
-        }
-        let whole = try memory.get("") as? [String: Any] ?? [:]
-        return whole.isEmpty ? nil : whole
     }
 
     /// The space a `.something` document holds, checked whole. Throws a `CodedError`: IMPORT_TOO_BIG (over 20 MB or

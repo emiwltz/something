@@ -819,7 +819,7 @@ struct AcceptanceShell {
         library.preferences.includeMemory(true, of: "logbook")
         let running = try engine.launch("claude", folder: stage.home.root.path, model: nil, mode: nil, effort: nil)
         defer { engine.stopAll(within: 1, only: running) {} }
-        #expect(await wait(until: { engine.state.agents.contains { $0.id == running && $0.alive != false } }))
+        #expect(await wait(until: { engine.state.agents.contains { $0.id == running && $0.alive == true } }))
         model.launches.ids["logbook"] = [running]
         let word = try #require(bin.running("logbook").first)
         #expect(try grants()["logbook"] != nil && exists(conversation))
@@ -830,7 +830,7 @@ struct AcceptanceShell {
         #expect(toast()?.words == "Logbook is in the Trash · \(word) keeps running", "\(toast()?.words ?? "")")
         #expect(try trashed() == ["logbook.html", "logbook.json"] && grants()["logbook"] != nil && versions.list("logbook").count == 1)
         #expect(exists(conversation), "its conversation is kept")
-        #expect(engine.state.agents.contains { $0.id == running && $0.alive != false })
+        #expect(engine.state.agents.contains { $0.id == running && $0.alive == true })
 
         // Undo: everything back, in its place, the space open, its row ringed.
         try undo()
@@ -850,7 +850,7 @@ struct AcceptanceShell {
         toast()?.leave(now: true)
         #expect(try !exists(conversation) && grants()["logbook"] == nil && trashed().contains("logbook"), "its versions went to the Trash")
         #expect(library.preferences.memoryExport["logbook"] == nil && model.launches.ids["logbook"] == nil && group("logbook") == nil)
-        #expect(engine.state.agents.contains { $0.id == running && $0.alive != false })
+        #expect(engine.state.agents.contains { $0.id == running && $0.alive == true })
 
         // Undo that can't: a new space took the name, and what the new one has stays.
         let pet = try #require(library.entry("pet")), title = pet.title
@@ -862,7 +862,29 @@ struct AcceptanceShell {
         library.relist()
         try undo()
         #expect(toast()?.words == "\(title) stays in the Trash: a new space took its name")
-        #expect(try library.entry("pet") != nil && grants()["pet"] != nil)
+        #expect(try library.entry("pet") != nil && grants()["pet"] == nil, "a page under that name inherits no answer")
+        // Put back in Finder during the toast: the same space, which keeps what it left.
+        let oracleGrant = try #require(library.entry("oracle"))
+        var answers = try AppFile.read(places.grants)
+        answers.spaces["oracle"] = Grant(declared: Asked(Declaration(name: "oracle")), at: "2026-10-17T09:00:00Z")
+        try answers.write(places.grants)
+        bin.move(oracleGrant)
+        try FileManager.default.moveItem(at: trash.appendingPathComponent("oracle.html"), to: oracleGrant.space.location)
+        library.relist()
+        toast()?.leave(now: true)
+        #expect(try grants()["oracle"] != nil)
+        // A Trash that fails leaves the toast on screen and its Undo whole.
+        let tiny = try #require(library.entry("project")), held = library.discard
+        var answer = try AppFile.read(places.grants)
+        answer.spaces["project"] = Grant(declared: Asked(Declaration(name: "project")), at: "2026-10-17T09:00:00Z")
+        try answer.write(places.grants)
+        bin.move(tiny)
+        library.discard = { _ in throw SpaceError("Invented.") }
+        bin.move(try #require(library.entry("agents")))
+        library.discard = held
+        #expect(try grants()["project"] != nil && library.entry("agents") != nil)
+        try undo()
+        #expect(toast()?.words == "\(tiny.title) is back" && library.entry("project") != nil)
         // The Trash emptied meanwhile: said too.
         let stack = try #require(library.entry("stack"))
         bin.move(stack)
@@ -870,10 +892,10 @@ struct AcceptanceShell {
         try undo()
         #expect(toast()?.words == "\(stack.title) is no longer in the Trash")
         // A second Trash ends the first's Undo at once.
-        let brief = try #require(library.entry("brief")), oracle = try #require(library.entry("oracle"))
+        let brief = try #require(library.entry("brief")), second = try #require(library.entry("project"))
         Session(kind: "claude", space: "brief").save(in: places.assistants)
         bin.move(brief)
-        bin.move(oracle)
+        bin.move(second)
         #expect(!exists(Session.file("brief", in: places.assistants)))
         bin.finish()
     }
