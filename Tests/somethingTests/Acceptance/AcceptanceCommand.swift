@@ -449,7 +449,7 @@ struct AcceptanceCommand {
         let sheet = try #require(KeysSheet.toggle(in: shell.layer, motion: .reduced))
         #expect(shell.window.firstResponder === sheet && sheet.frame == shell.layer.bounds)
         let card = try #require(sheet.subviews.first)
-        let shows = ["Keyboard Shortcuts", "SPACES", "SHOW", "ASSISTANT", "WINDOW", "Go to a space, or ask", "Close Info or History",
+        let shows = ["Keyboard Shortcuts", "SPACES", "POINTING", "ASSISTANT", "WINDOW", "Go to a space, or ask", "Close the panel", "Reload the space", "Your agents, Info and History",
                      "Point inside a drawn frame", "hold", "Talk to this space's assistant", "Show the request that waits", "Keyboard shortcuts",
                      "Close window", "Menu keys can be changed in System Settings", "Close"]
         try await stage.appearances { suffix in

@@ -6,9 +6,9 @@
       ["new", "New Space", "⌘N"],
       ["tpls", "Templates", "⇧⌘T"],
       ["goto", "Go to space 1 to 9", "⌘1 … ⌘9"],
-      ["reload", "Reload space", "⌘R"],
-      ["insp", "Space info", "⌘I"],
-      ["escpanel", "Close Info or History", "esc", "contextual"]
+      ["reload", "Reload the space", "⌘R"],
+      ["insp", "Your agents, Info and History", "⌘I"],
+      ["escpanel", "Close the panel", "esc", "contextual"]
     ]},
     {"area": "Assistant", "items": [
       ["ask", "Talk to this space’s assistant", "⌘K"],
@@ -18,7 +18,7 @@
       ["stop", "Stop the assistant", "⌘."],
       ["showreq", "Show the request that waits", "⌥⌘P"]
     ]},
-    {"area": "Show", "items": [
+    {"area": "Pointing", "items": [
       ["pointpart", "Point at a part", "⌥⌘S"],
       ["point", "Point inside a drawn frame", "hold ⌥", "contextual"],
       ["undo", "Undo the last change", "⌘Z"]

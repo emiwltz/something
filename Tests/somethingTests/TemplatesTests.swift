@@ -171,6 +171,15 @@ import WebKit
         #expect(shown == [Home.share.appendingPathComponent("templates/pet.html")])
     }
 
+    /// Its launch buttons come from its table of names, in that order: every program something starts has one.
+    @Test func projectWatchCanLaunchEveryProgram() throws {
+        let page = try String(contentsOf: Self.folder.appendingPathComponent("project.html"), encoding: .utf8)
+        let names = try #require(page.components(separatedBy: "const NAMES = {").last?.components(separatedBy: "}").first)
+        let launchable = Registry.app.kinds.launchable
+        #expect(launchable.count == 6 && launchable.allSatisfy { names.contains("\($0): \"") }, "\(launchable)")
+        #expect(page.contains("Object.keys(NAMES).filter((k) => state.kinds[k] && state.kinds[k].launch"))
+    }
+
     @MainActor @Test func projectWatchFollowsTheFolderChosenFirst() throws {
         let home = try home()
         defer { home.remove() }

@@ -38,7 +38,7 @@ struct AssistantCard: View {
                 }
                 if model.place != .blank { composer }
             }
-            .frame(width: AssistantCard.width)
+            .frame(width: model.cardWidth)
             .background {
                 let shape = RoundedRectangle(cornerRadius: Look.card + 4, style: .continuous)
                 let dark = scheme == .dark
@@ -119,6 +119,7 @@ struct AssistantCard: View {
                     Text($0).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.bottom, 4)
+                if let word = model.firstWord { line(.reply(word)) }
                 let rows = model.rows, ended = !model.working
                 // A finished build's steps are its Details': drawn there, not in the thread.
                 let built = rows.indices.compactMap { at in AssistantModel.built(rows, at: at, ended: ended).map { (at, $0) } }

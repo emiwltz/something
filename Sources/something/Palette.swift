@@ -190,6 +190,7 @@ import SwiftUI
         switch id {
         case "ask": "Talk to \(Words.possessive(library.entry(library.selection.space)?.title ?? "this space")) Assistant"
         case "full": full() ? "Exit Full Screen" : "Enter Full Screen"
+        case "keys": "Keyboard Shortcuts"
         default: command.title.replacingOccurrences(of: "…", with: "")
         }
     }
@@ -382,6 +383,7 @@ struct PaletteCard: View {
                         MoveKeyframe(segment.on && calm ? 0.0 : 1)
                         LinearKeyframe(1.0, duration: segment.on && calm ? 0.28 : 0.01, timingCurve: Look.out.unit)
                     }
+                    .help(Self.tip(segment.place))
                     .accessibilityLabel(Self.label(segment, model))
                     .accessibilityAddTraits(segment.on ? [.isButton, .isSelected] : .isButton)
             }
@@ -412,6 +414,15 @@ struct PaletteCard: View {
         .background(segment.on ? Look.Token.bg2.ui : .clear, in: RoundedRectangle(cornerRadius: 6))
         .overlay { if segment.on { RoundedRectangle(cornerRadius: 6).strokeBorder(Look.Token.line2.ui, lineWidth: 1) } }
         .contentShape(Rectangle())
+    }
+
+    /// The bubble of a segment, the mockup's.
+    static func tip(_ place: PaletteModel.Segment.Place) -> String {
+        switch place {
+        case .here: "This space"
+        case .new: "A new space, built from this sentence"
+        case .another: "Another space · click again for the next one"
+        }
     }
 
     /// What VoiceOver says of a segment: where it sends, and the space it names.

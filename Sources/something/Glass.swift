@@ -273,7 +273,8 @@ final class Glass: WindowLayer {
 
     /// Places the sticker, its label and the card, except while the card moves between them.
     func place() {
-        let surface = corner
+        let surface = corner, fitted = max(0, min(AssistantCard.width, room.width - 2 * AssistantCard.margin))
+        if model.cardWidth != fitted { model.cardWidth = fitted }
         if !snapping, sticker.frame != stickerFrame { sticker.frame = stickerFrame }
         // The label on the side of the sticker toward the middle.
         if !label.isHidden {

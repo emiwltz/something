@@ -611,6 +611,17 @@ struct AcceptanceAssistant {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "x6-1" + suffix, root: stage.home.root)
         }
+        // A center too narrow for the card, the panel open: the card keeps its margins and nothing leaves it.
+        shell.window.setContentSize(NSSize(width: 800, height: 700))
+        shell.toggleInfo(spaceOpen: true)
+        shell.window.layoutIfNeeded()
+        let room = shell.glass.bounds.width
+        #expect(room < AssistantCard.width + 2 * AssistantCard.margin, "\(room)")
+        #expect(await wait { model.cardWidth == room - 2 * AssistantCard.margin && shell.glass.card.fittingSize.width == room })
+        #expect(shell.glass.card.frame.width == room && shell.glass.card.frame.maxX == room)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "x6-1-narrow" + suffix, root: stage.home.root)
+        }
         try await AcceptanceAssistant.stop(model)
     }
 

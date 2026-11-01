@@ -84,6 +84,8 @@ import SomethingCore
             if place.space != nil, oldValue.space == nil { open = false }
             // The space a build made, arriving: its card opens on the reply.
             if let space = place.space, space == revealing { (open, threadShown, revealing) = (true, true, nil) }
+            // A template's copy: opening the card shows its first word.
+            if let space = place.space, space == fromTemplate { threadShown = true }
             // Leaving New Space stops nothing: its builds go on, followed from their rows.
             if oldValue == .blank, place != .blank { (halted, nudged, watched) = (nil, false, nil) }
             resolve()
@@ -132,6 +134,8 @@ import SomethingCore
     var unfolded: Set<Int> = []
     /// The height the card takes at the bottom of the center, set by the glass: the blank page keeps clear of it.
     var floating: CGFloat = 0
+    /// The card's width, set by the glass: 412 points, less in a center too narrow for them.
+    var cardWidth = AssistantCard.width
     /// Whether the card, closed, is still shrinking into the sticker: it is drawn until it is there.
     var folding = false
     /// Whether the open space's journal could not be written.
@@ -572,6 +576,12 @@ import SomethingCore
 
     /// The conversation's first lines: where the agent works and how it asks, whether it can pick a conversation up,
     /// and why a new one began. A conversation picked up after sleep said them when it began: it shows none.
+    /// What the assistant says first on a template's copy, until the conversation has rows.
+    var firstWord: String? {
+        guard case .space(let title, let space, _) = place, space == fromTemplate, rows.isEmpty else { return nil }
+        return "This is your copy of \(title). Tell me what to change, and I change it here."
+    }
+
     var firstLines: [String] {
         guard session.kept.isEmpty else { return [] }
         let agent = kind.flatMap(Registry.app.agent), full = fullAccess ? "Full Access is on: something allows what it asks." : nil

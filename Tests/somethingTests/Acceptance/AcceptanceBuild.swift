@@ -794,6 +794,14 @@ struct AcceptanceBuild {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d5-narrow" + suffix, root: stage.home.root)
         }
+        // A template's copy opens with the assistant's first word, gone with the first message.
+        let model = shell.assistant
+        model.fromTemplate = "brief"
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        #expect(model.firstWord == "This is your copy of Daily brief. Tell me what to change, and I change it here." && model.threadShown)
+        model.fromTemplate = nil
+        #expect(model.firstWord == nil)
     }
 
     /// My agents' preview: its picture under the bar, the toolbar naming it; Escape goes back to the cards

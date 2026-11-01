@@ -52,7 +52,7 @@
   #problem { grid-area: problem; margin: 0; font: 12px var(--mono); color: var(--fail); border: 1px solid var(--fail); padding: 8px 12px; }
 
   header { grid-area: head; display: flex; align-items: flex-end; gap: 30px; flex-wrap: wrap; }
-  .launch { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  .launch { margin-left: auto; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .launch .why { max-width: 340px; margin: 0; }
   button { font-size: 12.5px; letter-spacing: .14em; color: var(--line); background: transparent; border: 1.5px solid var(--line);
            padding: 8px 14px; cursor: pointer; }
@@ -218,7 +218,7 @@
   function launchers() {
     const host = state && !state.agents.length ? $("awaiting-launch") : $("launch");
     $(host.id === "launch" ? "awaiting-launch" : "launch").replaceChildren();
-    const kinds = state ? ["claude", "codex"].filter((k) => state.kinds[k] && state.kinds[k].launch && state.kinds[k].installed !== false) : [];
+    const kinds = state ? Object.keys(NAMES).filter((k) => state.kinds[k] && state.kinds[k].launch && state.kinds[k].installed !== false) : [];
     const allowed = kinds.filter((k) => has("launch", k) && something.granted.folder);
     host.replaceChildren(...allowed.map((kind) => {
       const button = make("button", "", "Launch " + label(kind));

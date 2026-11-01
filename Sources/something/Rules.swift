@@ -47,6 +47,9 @@ enum Rules {
         }
     }
 
+    /// The toast once `rule` is kept for the space titled `title`.
+    static func kept(_ rule: Rule, title: String) -> String { "\(Registry.app.name(of: rule.kind)) may now run \(rule.command) for \(title)" }
+
     /// Takes `rule` out of the grant of the space `name`: the next request for that command asks again. Throws as
     /// `Grants.update`.
     static func revoke(_ rule: Rule, in name: String, _ grants: Grants) throws {
@@ -135,7 +138,10 @@ extension App {
         }
         panels.keep = { [weak self] rule, request in
             guard let self, let name = space(ofAgent: request.agent) else { return }
-            do { try Rules.keep(rule, in: name, Grants(places.grants)) } catch { ask.tell(error.sentence) }
+            do {
+                try Rules.keep(rule, in: name, Grants(places.grants))
+                shell.toast(Rules.kept(rule, title: library.entry(name)?.title ?? name), quiet: true)
+            } catch { ask.tell(error.sentence) }
             if shell.infoShown { info.show(info.space) }
         }
         panels.alone = { [weak self] request, prompt in

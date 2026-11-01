@@ -9,7 +9,7 @@ import AppKit
 enum Keys {
     struct Command {
         /// The shortcut sheet's areas, in its order.
-        enum Area: String, CaseIterable { case spaces = "Spaces", assistant = "Assistant", show = "Show", window = "Window" }
+        enum Area: String, CaseIterable { case spaces = "Spaces", assistant = "Assistant", show = "Pointing", window = "Window" }
 
         let id: String
         /// The menu's words.
@@ -45,10 +45,10 @@ enum Keys {
                 area: .spaces, line: "Templates", mine: true),
         Command(id: "goto", title: "Go to Space", owner: "F5", area: .spaces, line: "Go to space 1 to 9", words: "⌘1 … ⌘9", mine: true),
         Command(id: "reload", title: "Reload Space", key: "r", action: #selector(App.reloadSpace(_:)), owner: "F5", area: .spaces,
-                line: "Reload space", mine: true, needsSpace: true),
-        Command(id: "insp", title: "Show Info", key: "i", action: #selector(App.toggleInfo(_:)), owner: "W4", area: .spaces, line: "Space info",
+                line: "Reload the space", mine: true, needsSpace: true),
+        Command(id: "insp", title: "Show Info", key: "i", action: #selector(App.toggleInfo(_:)), owner: "W4", area: .spaces, line: "Your agents, Info and History",
                 mine: true, needsSpace: true),
-        Command(id: "escpanel", title: "Close Info or History", owner: "W4", area: .spaces, line: "Close Info or History", words: "esc"),
+        Command(id: "escpanel", title: "Close the Panel", owner: "W4", area: .spaces, line: "Close the panel", words: "esc"),
         Command(id: "ask", title: "Ask…", key: "k", action: #selector(App.askAssistant(_:)), owner: "F5", area: .assistant,
                 line: "Talk to this space’s assistant", mine: true, needsSpace: true),
         Command(id: "convo", title: "Show Conversation", key: "j", action: #selector(App.showConversation(_:)), owner: "F5", area: .assistant,
