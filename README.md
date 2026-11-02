@@ -1,5 +1,9 @@
 # something
 
+<p align="center"><img src=".github/readme/hero.png" width="900" alt="something showing a space, a countdown to the weekend with what its agents still have to finish, beside its Info panel"></p>
+
+<p align="center"><strong>Your pages. Your agents. One Mac app.</strong></p>
+
 something is a Mac app for **spaces**, pages of your own that you build with your own coding agent, such as a board of who is waiting
 for you, a morning paper of what your agents did, or a small game for your breaks. something shows them safely, and
 lets them see the coding agents on your Mac and talk to them.
@@ -16,6 +20,28 @@ advance for your Mac, or where none fits, builds one with Apple's Command Line T
 brew install emiwltz/tap/something
 something
 ```
+
+## How it works
+
+<p align="center"><img src=".github/readme/how-it-works.svg" width="900" alt="You describe a page, your coding agent builds it, and something shows it locked off the network. The page reaches the agents on your Mac through something.js, and only you answer a permission, in a window of your Mac."></p>
+
+## Six templates to start from
+
+<table>
+<tr>
+<td width="33%"><img src="share/templates/one-line.png" alt="The One Line template"><br><strong>One Line</strong><br>All your agents in one sentence, and one button for what matters now.</td>
+<td width="33%"><img src="share/templates/deck.png" alt="The Decision Deck template"><br><strong>Decision Deck</strong><br>Your agents' questions in one pile of cards, with their answers as buttons.</td>
+<td width="33%"><img src="share/templates/council.png" alt="The Council template"><br><strong>Council</strong><br>One question, three agents side by side, their disagreements marked.</td>
+</tr>
+<tr>
+<td width="33%"><img src="share/templates/answers.png" alt="The Living Answers template"><br><strong>Living Answers</strong><br>Ask a question and an agent answers with a small tool you can pin.</td>
+<td width="33%"><img src="share/templates/ledger.png" alt="The Consent Ledger template"><br><strong>Consent Ledger</strong><br>Who allowed each action of your agents.</td>
+<td width="33%"><img src="share/templates/village.png" alt="The Prompt Town template"><br><strong>Prompt Town</strong><br>Your agents live in a small town you walk through.</td>
+</tr>
+</table>
+
+Read on: [the first minutes](#the-first-minutes), [the promise](#the-promise), [permissions](#permissions), and the
+[guide](share/guide.md) for what a space can do.
 
 ## The first minutes
 

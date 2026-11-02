@@ -407,5 +407,7 @@ enum Mockup {
         let (text, headings) = Help.text("# Title\n\nA [link](https://example.com) and **bold**\nwrapped.\n\n- one\n  more\n1. two\n\n## Next\n")
         #expect(text.string == "Title\nA link and bold wrapped.\n•\tone more\n1.\ttwo\nNext\n")
         #expect(headings == ["Title": 0, "Next": text.string.count - 5])
+        // The page's pictures are for GitHub: an HTML line says nothing in a window that only reads.
+        #expect(Help.text("# Title\n\n<p><img src=\"a.png\"></p>\n\nWords.\n").0.string == "Title\nWords.\n")
     }
 }

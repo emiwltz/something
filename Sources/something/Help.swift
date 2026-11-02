@@ -82,7 +82,7 @@ enum Help {
                 if trimmed.hasPrefix("|-") || trimmed.hasPrefix("| -") || trimmed.hasPrefix("|:") { continue }
                 if open, case .kept = blocks[blocks.count - 1].0 { blocks[blocks.count - 1].1 += "\n" + line } else { blocks.append((.kept, line)) }
                 open = true
-            } else if trimmed.isEmpty {
+            } else if trimmed.isEmpty || trimmed.hasPrefix("<") {
                 open = false
             } else if let level = trimmed.firstIndex(where: { $0 != "#" }).map({ trimmed.distance(from: trimmed.startIndex, to: $0) }),
                       level > 0, trimmed.dropFirst(level).first == " " {
