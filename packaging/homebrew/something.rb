@@ -4,9 +4,9 @@
 class Something < Formula
   desc "Sees every coding agent on your Mac and gives your HTML pages a bridge to them"
   homepage "https://github.com/emiwltz/something"
-  # The release v0.2.0, as in the tap's twin, which also gets its bottles. A release: AGENTS.md, "Releasing".
-  url "https://github.com/emiwltz/something/archive/refs/tags/v0.2.0.tar.gz"
-  sha256 "88ba2489ded5c448b54730cde4c0ed6effb1006064d158fc0a407ead2c224f43"
+  # The release v0.3.0, as in the tap's twin, which also gets its bottles. A release: AGENTS.md, "Releasing".
+  url "https://github.com/emiwltz/something/archive/refs/tags/v0.3.0.tar.gz"
+  sha256 "2bd702734adc7e367bc187150b2fd9c0987303fc0516e83f451a051b77fc13a8"
   license all_of: ["MIT", "OFL-1.1"]
   head "https://github.com/emiwltz/something.git", branch: "main"
 
