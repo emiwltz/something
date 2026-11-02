@@ -465,7 +465,7 @@ final class PointOverlay: NSView {
             default: return 9
             }
         }
-        let boxWidth = 12 + 13 + 9 + zip(pieces, gaps).reduce(0) { $0 + width($1.0) + $1.1 } + 14
+        let boxWidth = zip(pieces, gaps).reduce(CGFloat(12 + 13 + 9 + 14)) { (sum: CGFloat, piece) in sum + width(piece.0) + piece.1 }
         let p = progress(0.45, since: arrived, Look.out)
         let box = CGRect(x: (bounds.width - boxWidth) / 2, y: 14 - 56 * (1 - p), width: boxWidth, height: 34)
         NSGraphicsContext.saveGraphicsState()

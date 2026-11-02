@@ -483,8 +483,8 @@ final class Tag: NSView {
 
     // The mockup's .atag: 30 high (with a point of room around), 11 before the title, 8 between the pieces, 6 after the key's 5-point padding.
     override var fittingSize: NSSize {
-        let p = parts
-        return NSSize(width: 11 + ceil(p.title.size().width) + 8 + ceil(p.words.size().width) + 8 + ceil(p.key.size().width) + 10 + 6 + 2, height: 32)
+        let p = parts, widths: [CGFloat] = [p.title, p.words, p.key].map { ceil($0.size().width) }
+        return NSSize(width: widths.reduce(45, +), height: 32)
     }
 
     override func draw(_ dirtyRect: NSRect) {

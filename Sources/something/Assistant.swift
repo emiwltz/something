@@ -1050,9 +1050,9 @@ import SomethingCore
 
     /// Put Idle Assistants to Sleep: every other assistant awake with nothing under way sleeps now. Returns how many.
     @discardableResult func putIdleToSleep() -> Int {
-        let idle = sessions.values.filter { $0 !== session && idle($0) }
-        idle.forEach(sleep)
-        return idle.count
+        let resting = sessions.values.filter { $0 !== session && idle($0) }
+        resting.forEach(sleep)
+        return resting.count
     }
 
     /// Stops the agent of `session` and keeps its turns: its next message wakes it.

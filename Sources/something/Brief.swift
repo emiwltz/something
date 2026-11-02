@@ -74,8 +74,8 @@ struct Brief: Equatable {
     /// The lines of the build's message: each question answered, in full since the builder never saw them, then the
     /// name. A question the person did not reach is left out; with none answered or skipped, the agent decides.
     func lines(_ answers: [Int: Answer]) -> [String] {
-        let said = questions.indices.compactMap { index in answers[index].flatMap { said($0, to: questions[index]) }.map { "\(questions[index].text) \($0)" } }
-        return [said.isEmpty ? Brief.nothing : "[something] Brief: \(said.joined(separator: "; "))."] + (name.map { ["[something] Name it: \($0)."] } ?? [])
+        let answered = questions.indices.compactMap { index in answers[index].flatMap { said($0, to: questions[index]) }.map { "\(questions[index].text) \($0)" } }
+        return [answered.isEmpty ? Brief.nothing : "[something] Brief: \(answered.joined(separator: "; "))."] + (name.map { ["[something] Name it: \($0)."] } ?? [])
     }
 
     private func said(_ answer: Answer, to question: Question) -> String? {
