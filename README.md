@@ -263,6 +263,12 @@ The suite has run on macOS 27 with the Command Line Tools 27 alone (Swift 6.4); 
 15 and on its latest macOS runner, and installs the formula there with Homebrew. The bottles of 0.2.0 are built and
 installed on macOS 26 and 15 (Apple silicon) and macOS 15 on Intel; the suite itself has not run on an Intel Mac.
 
+Known limits of 0.3.0: the formula installs on GitHub's macOS 15 and latest macOS runners, but the suite is green only
+on the Mac above, and red on both runners. Most of what fails there are drawings, animations and exact layouts, which
+differ on those machines; none of it is proven to be a fault of the app. On macOS 15, three tests fail every time and
+are not explained yet: a new space may take time to appear in the sidebar, and an agent may be missing from Info's
+list. It has not been tried by hand on macOS 26 or 15, nor on a fresh Mac.
+
 ## Security
 
 The agents run as you, with your own settings, in the folder you chose: give something the trust you give them. A
