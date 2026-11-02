@@ -160,7 +160,7 @@
 
   // --- The words sent to the agents ----------------------------------------------------------------------------
 
-  const FORMAT = "Do not change any file and do not run anything: answer from what you know. Reply in plain sentences, no markdown, at most 80 words, in the language of the question. Then write a line holding only WHY: and under it 3 to 5 short lines, each one step of how you reasoned.";
+  const FORMAT = "Do not change any file and do not run anything: answer from what you know. Reply in plain sentences, no markdown, at most 80 words, in the language of the question. Then write a line holding only WHY: and under it the 2 or 3 main reasons for your answer, one short line each.";
   const firstRound = (q) => `You sit on a council with agents of other families. Each answers on its own; a person judges. Earlier questions no longer matter.\n\nThe question: ${q}\n\n${FORMAT}`;
   const answersOf = (seats) => seats.map((s) => `${label(s.kind)} said:\n${s.last.text}`).join("\n\n");
   const secondRound = (q, others) => `Second round of the council. The question: ${q}\n\nHere is what the others answered.\n\n${answersOf(others)}\n\nKeep your answer or change it, whichever is right; do not agree just to agree. ${FORMAT} Before WHY:, add a line holding only STANCE: kept or STANCE: changed.`;
@@ -506,9 +506,9 @@
     const seat = session.seats[i], last = seat.last;
     if (!last) return;
     const layer = $("layer");
-    layer.replaceChildren(heading(seat.kind, `${label(seat.kind)} · Its reasoning`, `round ${last.round}`));
+    layer.replaceChildren(heading(seat.kind, `${label(seat.kind)} · Its reasons`, `round ${last.round}`));
     if (last.why.length) layer.append(bullets(last.why));
-    else layer.append(element("p", { textContent: "It gave no reasoning with this answer." }));
+    else layer.append(element("p", { textContent: "It gave no reasons with this answer." }));
     if (last.did.length) layer.append(element("h5", { textContent: "What it looked at" }), bullets(last.did));
     layer.append(element("p", { textContent: "From its own words, its thoughts and its tool calls in this turn." }));
     const home = $("root").getBoundingClientRect(), box = from.closest("article").getBoundingClientRect();
