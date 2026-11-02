@@ -108,7 +108,7 @@ struct AccessibilityTests {
         library.select(.templates)
         shell.show(nil, templates: true)
         let templates = await Self.walk(shell.window)
-        #expect(templates.words.contains("My agents") && templates.unnamed.isEmpty, "\(templates)")
+        #expect(templates.words.contains("One Line") && templates.unnamed.isEmpty, "\(templates)")
         await AcceptanceBuild.finish(model)
     }
 

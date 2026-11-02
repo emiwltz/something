@@ -70,7 +70,7 @@ final class Stage {
         seeded = area != "show"
         try Library.prepare(home.places)
         for (name, _) in Stage.templates {
-            try home.space(name, try String(contentsOf: Home.share.appendingPathComponent("templates/\(name).html"), encoding: .utf8))
+            try home.space(name, try String(contentsOf: Stage.oracle.deletingLastPathComponent().appendingPathComponent("\(name).html"), encoding: .utf8))
         }
         try home.space("oracle", try String(contentsOf: Stage.oracle, encoding: .utf8))
         try Memory(folder: home.places.data, space: "logbook").set("notes", Stage.notes)

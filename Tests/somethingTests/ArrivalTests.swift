@@ -38,27 +38,27 @@ struct ArrivalTests {
         defer { stage.remove() }
         let (shell, library, gallery, _) = try AcceptanceBuild.templates(stage)
         defer { shell.window.close() }
-        #expect(await wait(until: { gallery.drawn["agents"] != nil }))
-        let agents = try #require(library.templates.first { $0.id == "agents" })
+        #expect(await wait(until: { gallery.drawn["deck"] != nil }))
+        let deck = try #require(library.templates.first { $0.id == "deck" })
         // The card's Use, as its button does (offscreen, SwiftUI's buttons cannot be pressed).
-        gallery.used = "agents"
-        library.use(agents)
-        #expect(library.selection == .space("agents-2"))
-        #expect(Arrival.made("project", in: shell) == nil)
-        let arrival = try #require(Arrival.made("agents-2", in: shell))
-        let card = try #require(gallery.drawn["agents"])
+        gallery.used = "deck"
+        library.use(deck)
+        #expect(library.selection == .space("deck"))
+        #expect(Arrival.made("council", in: shell) == nil)
+        let arrival = try #require(Arrival.made("deck", in: shell))
+        let card = try #require(gallery.drawn["deck"])
         #expect(!arrival.start.face && arrival.start.stroke == 22 && abs(arrival.start.rect.width - card.width) < 0.5
                 && abs(arrival.start.arm - min(card.width, card.height) * 0.3) < 0.5)
         #expect(arrival.bounds.contains(arrival.start.rect) && arrival.start.rect.minY > arrival.room.minY, "\(arrival.start.rect)")
         #expect(arrival.superview === shell.glass && !shell.glass.isHidden && arrival.hitTest(NSPoint(x: 400, y: 400)) == nil)
         var arrived = false
-        arrival.play("agents-2", library: library, motion: .reduced) { arrived = true }
+        arrival.play("deck", library: library, motion: .reduced) { arrived = true }
         #expect(!arrival.playing && arrival.progress == 1)
         #expect(await wait(until: { arrived }))
         #expect(arrival.superview == nil && !shell.glass.subviews.contains { $0 is Arrival })
-        #expect(library.selection == .space("agents-2") && library.fresh == "agents-2")
+        #expect(library.selection == .space("deck") && library.fresh == "deck")
         #expect(await wait(until: { library.fresh == nil }), "then let go, so the next arrival rings it again")
         gallery.used = nil
-        #expect(Arrival.made("agents-2", in: shell) == nil)
+        #expect(Arrival.made("deck", in: shell) == nil)
     }
 }

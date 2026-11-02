@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Consent Ledger</title>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "Consent Ledger",
+  "description": "Who decided what: each action of your agents, sorted by who allowed it, and kept while this space is open.",
+  "agents": { "see": "all" },
+  "rights": ["state", "store"]
+}
+</script>
+<style>
+  [hidden] { display: none !important; }
+  :root {
+    color-scheme: light;
+    --ui: -apple-system, system-ui, sans-serif;
+    --display: ui-serif, "New York", Georgia, serif;
+    --voice: ui-serif, "New York", Georgia, serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --you: #1D1C19; --rule: #5B7FD6; --mode: #3FA98E; --hook: #8A63D2;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: #FBFAF6; color: #1D1C19; font-family: var(--ui); overflow: hidden; }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
+  button:focus-visible { outline: 2px solid #1D1C19; outline-offset: -2px; }
+
+  main { height: 100%; display: flex; flex-direction: column; padding: 16px 24px 12px; }
+  header { flex: none; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-bottom: 1.5px solid #1D1C19; padding-bottom: 9px; }
+  h1 { margin: 0; font: 500 23px/1 var(--display); letter-spacing: -.01em; }
+  .sub { font: 500 12px/1 var(--mono); color: #77736A; white-space: nowrap; }
+  .sub button { margin-left: 8px; text-decoration: underline; text-underline-offset: 2px; }
+  .sub button:hover { color: #1D1C19; }
+
+  .alert { flex: none; margin: 10px 0 0; padding: 7px 10px; border-left: 3px solid #C23A2B; font: 500 13px/1.4 var(--ui); color: #C23A2B; }
+  .alert.calm { border-color: #CFCABF; color: #77736A; }
+
+  .gauges { flex: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(196px, 1fr)); max-height: 216px; overflow-y: auto; border-bottom: 1px solid #E2DED4; padding: 6px 0; }
+  .g { position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 96px; padding: 6px 18px 6px 8px; border-radius: 8px; }
+  .g:hover { background: #F4F1EA; }
+  .g.sel { background: #F0ECE3; }
+  .g svg { width: 56px; height: 34px; flex: none; overflow: visible; }
+  .g > span:nth-of-type(1) { display: block; min-width: 0; }
+  .g b { display: block; font: 500 19px/1 var(--mono); letter-spacing: -.03em; margin-top: 5px; }
+  .g b.nv { font: 500 15px/1.1 var(--display); letter-spacing: 0; }
+  .g small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 10.5px/1.3 var(--ui); color: #8E897E; margin-top: 2px; }
+  .g small.wait { color: #A66F00; }
+  .more { position: absolute; right: 7px; top: 7px; font: 500 13px/1 var(--ui); color: #B3AEA2; }
+
+  .kind { display: flex; align-items: center; gap: 6px; min-width: 0; font: 500 12px/1.2 var(--ui); white-space: nowrap; }
+  .kind i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--k); }
+  .kind span { overflow: hidden; text-overflow: ellipsis; }
+
+  .cols, .row { display: grid; grid-template-columns: 90px 160px minmax(0, 1fr) 96px 66px; align-items: center; column-gap: 12px; }
+  .cols { flex: none; margin-top: 8px; padding: 0 7px 7px; border-bottom: 1px solid #E2DED4; font: 600 10.5px/1 var(--mono); letter-spacing: .12em; color: #8E897E; }
+  .body { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 72px;
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent); }
+  .r { border-bottom: 1px solid #EFEBE3; }
+  .r.new { animation: arrive .45s cubic-bezier(.3,.7,.2,1); }
+  @keyframes arrive { from { opacity: 0; transform: translateY(-12px); } }
+  .r.den { background: #FCEDEA; }
+  .row { width: 100%; height: 32px; padding: 0 7px; font: 500 13px/1 var(--ui); white-space: nowrap; }
+  .r:not(.den) .row:hover { background: #F4F1EA; }
+  .row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .t { font: 500 12px/1 var(--mono); color: #77736A; }
+  .a code { font: 500 12px/1 var(--mono); background: #F0ECE3; padding: 2px 4px; border-radius: 3px; }
+  .row > .p { justify-self: start; font: 600 11px/1 var(--ui); padding: 4px 8px; border-radius: 999px; overflow: visible; }
+  .p.you { background: #1D1C19; color: #FBFAF6; }
+  .p.rule { background: #DCE6FA; color: #24489A; }
+  .p.hook { background: #E9E0FB; color: #5532A8; }
+  .p.mode { background: #D9F0EA; color: #1E6E5A; }
+  .p.none { background: transparent; color: #8E897E; box-shadow: inset 0 0 0 1px #CFCABF; }
+  .o { font: 600 12px/1 var(--mono); color: #2E7D57; }
+  .o.d { color: #C23A2B; }
+  .o.u { color: #A9A498; }
+  .d { padding: 2px 8px 10px 109px; font: 400 13px/1.45 var(--voice); color: #5A564D; animation: fade .3s ease; }
+  @keyframes fade { from { opacity: 0; } }
+  .d p { margin: 0; }
+  .d .raw { margin-top: 4px; font: 500 12px/1.4 var(--mono); color: #3A372F; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .d .meta { margin-top: 4px; font: 500 11.5px/1.4 var(--ui); color: #8E897E; overflow-wrap: anywhere; }
+
+  .empty { margin: 0; padding: 26px 7px; font: 400 15px/1.5 var(--voice); color: #77736A; }
+  .showmore { display: block; margin: 12px 7px; font: 500 12px/1 var(--mono); color: #77736A; text-decoration: underline; text-underline-offset: 2px; }
+  .leg { flex: none; margin: 0; padding: 8px 76px 0 0; font: 500 11px/1.25 var(--ui); color: #8E897E; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .layer { position: fixed; z-index: 6; width: 340px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow-y: auto; padding: 15px 17px 14px; background: #FFF; border: 1px solid #DDD8CD; border-radius: 10px;
+    box-shadow: 0 16px 36px rgba(30,25,15,.14); animation: drop .2s ease; }
+  @keyframes drop { from { opacity: 0; transform: translateY(-4px); } }
+  .layer h2 { margin: 0 0 8px; font: 500 17px/1.2 var(--display); overflow-wrap: anywhere; }
+  .layer p { margin: 0; font: 400 14px/1.45 var(--voice); color: #3A372F; }
+  .layer p b { font-family: var(--mono); font-weight: 500; font-size: 12.5px; }
+  .layer p.mean { margin-top: 9px; padding-top: 9px; border-top: 1px solid #EFEBE3; font: 500 12.5px/1.4 var(--ui); color: #77736A; }
+
+  @media (max-width: 640px) {
+    main { padding-left: 16px; padding-right: 16px; }
+    .cols, .row { grid-template-columns: 88px minmax(0, 1fr) 76px 58px; column-gap: 8px; }
+    .cols > :nth-child(2), .row > :nth-child(2) { display: none; }
+    .d { padding-left: 8px; }
+    .sub > span { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .r.new, .d, .layer { animation: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Consent Ledger</h1>
+    <p class="sub" style="margin:0"><span id="scope">Today · who allowed what</span><button id="days" type="button" hidden></button></p>
+  </header>
+  <p id="problem" class="alert" role="alert" hidden></p>
+  <p id="note" class="alert calm" hidden></p>
+  <section id="gauges" class="gauges" aria-label="One dial per agent" hidden></section>
+  <div class="cols" aria-hidden="true"><span>TIME</span><span>AGENT</span><span>ACTION</span><span>DECIDED BY</span><span>OUTCOME</span></div>
+  <section id="body" class="body" aria-label="Actions, newest first"></section>
+  <p class="leg">Dial: who decided each action · You: you answered · Rule, Hook, Mode: set in advance · Unknown: no decision recorded</p>
+</main>
+<div id="layer" class="layer" role="dialog" aria-label="Breakdown" hidden></div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const element = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+
+  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP", amp: "Amp", antigravity: "Antigravity", cursor: "Cursor" };
+  const COLORS = { claude: "#D97757", codex: "#2F8F7B", opencode: "#4F6BD8", pi: "#B8860B", omp: "#B24C8E", amp: "#D1503F", antigravity: "#5E8FB8", cursor: "#55524B" };
+  const kindName = (kind) => NAMES[kind] || "other agent";
+  const known = (value) => value === null || value === undefined || value === "" ? "unknown" : value;
+  const has = (right) => (something.granted?.rights || []).some((r) => r === right || r.startsWith(right + ":"));
+
+  // The decision's word, for the page. A word the contract may add later is not guessed at: it reads as unknown.
+  const WHO = { person: "you", rule: "rule", hook: "hook", mode: "mode" };
+  const BY = { you: "You", rule: "Rule", hook: "Hook", mode: "Mode", none: "Unknown" };
+  const who = (row) => WHO[row.by] || "none";
+  const COLOR = { you: "var(--you)", rule: "var(--rule)", mode: "var(--mode)", hook: "var(--hook)" };
+  const VERBS = { bash: "Run", shell: "Run", shell_command: "Run", exec_command: "Run", exec: "Run", command: "Run",
+    edit: "Edit", multiedit: "Edit", apply_patch: "Edit", patch: "Edit", write: "Write", read: "Read", notebookedit: "Edit",
+    webfetch: "Fetch", fetch: "Fetch", websearch: "Search", grep: "Search", glob: "Search", agent: "Start", task: "Start" };
+
+  const TEXT_LIMIT = 400, PAGE = 300;
+  const rows = new Map();          // every action seen, by thread, turn and item
+  const live = new Map();          // the agents the latest state lists, by dial
+  const dirty = new Set();         // the days to write to memory
+  const open = [];                 // the lines opened, last one last: Esc closes them in turn
+  let latest = null, loaded = false, allDays = false, limit = PAGE, openDial = null, saving = false, saveTimer = null;
+
+  const dayOf = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const parsed = (iso) => { const date = iso ? new Date(iso) : null; return date && !isNaN(date) ? date : null; };
+  const when = (row) => parsed(row.at) || parsed(row.seen) || new Date(0);
+
+  function problem(error) {
+    $("problem").hidden = !error;
+    $("problem").textContent = error ? error.message : "";
+  }
+
+  /* Keeping the record */
+
+  async function load() {
+    if (has("store")) {
+      try {
+        const days = (await something.store.get("days")) || {};
+        for (const list of Object.values(days)) for (const row of list || []) rows.set(row.key, row);
+      } catch (error) { problem(error); }
+    }
+    loaded = true;
+  }
+
+  function schedule() {
+    if (!has("store") || saveTimer) return;
+    saveTimer = setTimeout(() => { saveTimer = null; save(); }, 1200);
+  }
+
+  // One key per day, so that a new line rewrites one day and not the whole record.
+  async function save() {
+    if (saving) return schedule();
+    saving = true;
+    try {
+      for (const day of [...dirty]) {
+        dirty.delete(day);
+        const list = [...rows.values()].filter((row) => row.day === day);
+        await writeDay(day, list);
+      }
+    } catch (error) { problem(error); }
+    saving = false;
+  }
+
+  async function writeDay(day, list) {
+    try {
+      await something.store.set("days/" + day, list);
+    } catch (error) {
+      const days = [...new Set([...rows.values()].map((row) => row.day))].sort();
+      if (error.code !== "STORE_FULL" || days[0] === day) throw error;
+      await something.store.set("days/" + days[0], null);
+      for (const row of [...rows.values()]) if (row.day === days[0]) rows.delete(row.key);
+      problem({ message: `The memory was full: the record of ${days[0]} was dropped to make room.` });
+      return writeDay(day, list);
+    }
+  }
+
+  // Seen once, a line stays: older turns leave the state, not the record. A decision may come after the action
+  // began, so a line is updated, and a decision once known is never replaced by a null.
+  function merge(state) {
+    live.clear();
+    for (const agent of state.agents) live.set(agent.thread || agent.id, agent);
+    const seen = state.at || new Date().toISOString();
+    for (const thread of state.threads) {
+      const agent = state.agents.find((a) => a.id === thread.agent);
+      for (const turn of thread.turns) for (const item of turn.items) {
+        if (item.kind !== "tool" && item.kind !== "subagent" && !item.decision) continue;
+        const key = `${thread.id}|${turn.id}|${item.id}`;
+        const fresh = {
+          key, dial: thread.id, kind: agent?.kind || "other", name: agent?.name ?? thread.title ?? null,
+          folder: agent?.folder ?? null, origin: agent?.origin ?? null, item: item.kind,
+          tool: item.tool?.name ?? null, status: item.tool?.status ?? null,
+          text: (item.text || "").slice(0, TEXT_LIMIT), cut: !!item.truncated || (item.text || "").length > TEXT_LIMIT,
+          at: item.at ?? null, by: item.decision?.by ?? null, outcome: item.decision?.outcome ?? null,
+        };
+        const old = rows.get(key);
+        if (old) {
+          fresh.seen = old.seen; fresh.day = old.day;
+          if (fresh.by === null) { fresh.by = old.by; fresh.outcome = old.outcome; }
+          if (JSON.stringify(old) === JSON.stringify({ ...old, ...fresh })) continue;
+          Object.assign(old, fresh);
+        } else {
+          fresh.seen = seen;
+          fresh.day = dayOf(parsed(fresh.at) || parsed(seen) || new Date());
+          rows.set(key, fresh);
+        }
+        dirty.add(rows.get(key).day);
+      }
+    }
+    if (dirty.size) schedule();
+  }
+
+  /* What a line says */
+
+  function action(row) {
+    const name = row.tool ? String(row.tool) : null;
+    const verb = VERBS[(name || "").toLowerCase()] || name || (row.item === "subagent" ? "Start" : "Action");
+    let text = row.text.split("\n").map((line) => line.trim()).find(Boolean) || "";
+    if (name && text.toLowerCase().startsWith(name.toLowerCase())) text = text.slice(name.length).replace(/^[\s:(]+/, "");
+    return { verb, text };
+  }
+
+  function sentence(row) {
+    const kind = kindName(row.kind);
+    const said = who(row);
+    const verdict = row.outcome === "denied" ? "denied" : row.outcome === "allowed" ? "allowed" : null;
+    if (said === "you") {
+      const where = row.origin === "launched" ? "in something's window" : "where this agent runs";
+      return verdict ? `You answered ${where}: ${verdict}.` : `You answered ${where}.`;
+    }
+    if (said === "rule") return row.kind === "claude"
+      ? "Decided by a rule, from your Claude Code settings or one you kept in something. The contract says who decided, not which rule."
+      : "Decided by a lasting rule you kept in something. The contract says who decided, not which rule.";
+    if (said === "hook") return "Decided by a hook in your Claude Code settings. The contract says who decided, not which hook.";
+    if (said === "mode") return `Decided by ${kind}'s permission mode for this session.`;
+    if (row.kind === "pi") return "No decision recorded: pi never asks, by design. Unknown, not “allowed”.";
+    if (row.status === "running") return "No decision recorded so far: this action is still running, and one may yet appear.";
+    return "No decision recorded for this action, so who allowed it is unknown.";
+  }
+
+  function clock(row) {
+    const date = parsed(row.at);
+    if (!date) return "unknown";
+    const time = date.toLocaleTimeString("en-GB");
+    return allDays ? `${row.day.slice(5)} ${time.slice(0, 5)}` : time;
+  }
+
+  function kindTag(kind, label) {
+    const tag = element("span", "kind");
+    tag.style.setProperty("--k", COLORS[kind] || "#8E897E");
+    tag.append(element("i"), element("span", "", label));
+    return tag;
+  }
+
+  /* The table */
+
+  const lines = new Map();         // key: {node, sig}
+
+  function makeLine(row, animate) {
+    const node = element("div", "r");
+    if (animate) node.classList.add("new");
+    node.addEventListener("animationend", () => node.classList.remove("new"));
+    const head = element("button", "row");
+    head.type = "button";
+    head.addEventListener("click", () => toggle(row.key));
+    node.append(head);
+    return { node, head, detail: null, sig: "" };
+  }
+
+  function fillLine(line, row) {
+    const said = who(row);
+    const { verb, text } = action(row);
+    const denied = row.outcome === "denied";
+    const out = denied ? "denied" : row.outcome === "allowed" ? "allowed" : "—";
+    line.node.classList.toggle("den", denied);
+    const body = element("span", "a");
+    body.append(text ? verb + " " : verb);
+    if (text) body.append(element("code", "", text));
+    const label = `${kindName(row.kind)} · ${known(row.name)}`;
+    line.head.replaceChildren(element("span", "t", clock(row)), kindTag(row.kind, label), body,
+      element("span", "p " + said, BY[said]),
+      element("span", "o" + (denied ? " d" : out === "—" ? " u" : ""), out));
+    line.head.title = label;
+    line.head.setAttribute("aria-expanded", open.includes(row.key));
+    line.detail?.remove();
+    line.detail = null;
+    if (!open.includes(row.key)) return;
+    const detail = element("div", "d");
+    detail.append(element("p", "", sentence(row)));
+    if (row.text) detail.append(element("p", "raw", row.text + (row.cut ? " …" : "")));
+    const meta = [kindName(row.kind) + " · " + known(row.name), row.folder, row.status ? "tool " + row.status : null, row.at ? null : "time unknown"];
+    detail.append(element("p", "meta", meta.filter(Boolean).join(" · ")));
+    line.node.append(detail);
+    line.detail = detail;
+  }
+
+  function toggle(key) {
+    const at = open.indexOf(key);
+    if (at >= 0) open.splice(at, 1); else open.push(key);
+    render();
+  }
+
+  function view() {
+    const today = dayOf(new Date());
+    return [...rows.values()].filter((row) => allDays || row.day === today)
+      .sort((a, b) => when(b) - when(a) || (a.key < b.key ? 1 : -1));
+  }
+
+  function renderTable(list) {
+    const body = $("body");
+    const shown = list.slice(0, limit);
+    const wanted = new Set(shown.map((row) => row.key));
+    for (const [key, line] of lines) if (!wanted.has(key)) { line.node.remove(); lines.delete(key); }
+    const first = lines.size === 0;
+    let cursor = body.firstChild;
+    for (const row of shown) {
+      let line = lines.get(row.key);
+      if (!line) { line = makeLine(row, !first); lines.set(row.key, line); }
+      const sig = JSON.stringify(row) + open.includes(row.key) + allDays;
+      if (sig !== line.sig) { fillLine(line, row); line.sig = sig; }
+      if (line.node === cursor) cursor = cursor.nextSibling;
+      else body.insertBefore(line.node, cursor);
+    }
+    while (cursor) { const next = cursor.nextSibling; cursor.remove(); cursor = next; }
+    if (list.length > shown.length) {
+      const more = element("button", "showmore", `Show ${Math.min(PAGE, list.length - shown.length)} more`);
+      more.type = "button";
+      more.addEventListener("click", () => { limit += PAGE; render(); });
+      body.append(more);
+    }
+    if (!list.length) body.append(element("p", "empty", emptyWords()));
+  }
+
+  function emptyWords() {
+    if (!has("state") && !live.size) return "Nothing to show yet.";
+    if (!live.size) return "No agent on this Mac for now. When one runs, its actions land here.";
+    return allDays ? "No action seen yet." : "No action seen yet today. Each one lands here as it happens.";
+  }
+
+  /* The dials */
+
+  const dials = new Map();         // key: {node, sig}
+  const L = Math.PI * 28, ARC = "M4 34 A28 28 0 0 1 60 34";
+
+  function tally(list) {
+    const groups = new Map();
+    const group = (key) => {
+      if (!groups.has(key)) groups.set(key, { key, kind: "other", name: null, total: 0, you: 0, rule: 0, mode: 0, hook: 0, none: 0, denied: 0 });
+      return groups.get(key);
+    };
+    for (const row of list) {
+      const g = group(row.dial);
+      g.kind = row.kind; g.name = row.name;
+      g.total++; g[who(row)]++;
+      if (row.outcome === "denied") g.denied++;
+    }
+    for (const [key, agent] of live) {
+      const g = group(key);
+      g.agent = agent; g.kind = agent.kind; g.name = agent.name;
+    }
+    return [...groups.values()].sort((a, b) => (!!b.agent - !!a.agent) || b.total - a.total || known(a.name).localeCompare(known(b.name)));
+  }
+
+  const neverAsks = (g) => g.kind === "pi" && g.total === g.none;
+  const pct = (n, g) => Math.round(n / g.total * 100);
+
+  function dialArt(g) {
+    let acc = 0, segments = "";
+    if (g.total) for (const part of ["you", "rule", "mode", "hook"]) {
+      const v = g[part] / g.total;
+      if (v) segments += `<path d="${ARC}" fill="none" stroke="${COLOR[part]}" stroke-width="5" stroke-dasharray="${L * v} ${L}" stroke-dashoffset="${-L * acc}"/>`;
+      acc += v;
+    }
+    return `<svg viewBox="0 0 64 38" aria-hidden="true"><path d="${ARC}" fill="none" stroke="#ECE8DF" stroke-width="5"/>${segments}</svg>`;
+  }
+
+  function dialLines(g) {
+    if (!g.total) return [allDays ? "none seen yet" : "none today"];
+    if (neverAsks(g)) return ["by design:", "no decision recorded", `${g.total} action${g.total === 1 ? "" : "s"}`];
+    const parts = ["rule", "mode", "hook", "none"].filter((p) => g[p]).map((p) => `${p === "none" ? "unknown" : p} ${pct(g[p], g)}%`);
+    const out = [];
+    for (let i = 0; i < parts.length; i += 2) out.push(parts.slice(i, i + 2).join(" · "));
+    return [...out, `of ${g.total} action${g.total === 1 ? "" : "s"}`];
+  }
+
+  function waits(g) {
+    return !!g.agent && (g.agent.waiting === "permission" || g.agent.waiting === "answer");
+  }
+
+  function fillDial(dial, g) {
+    const text = element("span");
+    text.append(kindTag(g.kind, `${kindName(g.kind)} · ${known(g.name)}`));
+    const big = neverAsks(g) && g.total ? "never asks" : g.total ? `${pct(g.you, g)}% you` : "no actions";
+    text.append(element("b", big.endsWith("you") ? "" : "nv", big));
+    for (const line of dialLines(g)) text.append(element("small", "", line));
+    if (waits(g)) text.append(element("small", "wait", "waits for you"));
+    dial.node.innerHTML = dialArt(g);
+    dial.node.append(text, element("span", "more", "›"));
+    dial.node.title = `${kindName(g.kind)} · ${known(g.name)}`;
+  }
+
+  function renderDials(groups) {
+    const box = $("gauges");
+    box.hidden = !groups.length;
+    const wanted = new Set(groups.map((g) => g.key));
+    for (const [key, dial] of dials) if (!wanted.has(key)) { dial.node.remove(); dials.delete(key); }
+    if (openDial && !wanted.has(openDial)) closeLayer();
+    let cursor = box.firstChild;
+    for (const g of groups) {
+      let dial = dials.get(g.key);
+      if (!dial) {
+        const node = element("button", "g");
+        node.type = "button";
+        node.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (openDial === g.key) closeLayer(); else openLayer(g.key);
+        });
+        dial = { node, sig: "" };
+        dials.set(g.key, dial);
+      }
+      const { agent, ...plain } = g;
+      const sig = JSON.stringify(plain) + waits(g) + allDays;
+      if (sig !== dial.sig) { fillDial(dial, g); dial.sig = sig; }
+      if (dial.node === cursor) cursor = cursor.nextSibling;
+      else box.insertBefore(dial.node, cursor);
+    }
+    dials.forEach((dial, key) => dial.node.classList.toggle("sel", key === openDial));
+  }
+
+  /* The breakdown in words */
+
+  function phrase(node, parts) {
+    for (const part of parts) node.append(typeof part === "number" ? element("b", "", part) : part);
+    return node;
+  }
+
+  function breakdown(g) {
+    if (!g.total) return [allDays ? "No action seen yet." : "No action seen today."];
+    if (neverAsks(g)) return ["Of ", g.total, " actions, none carries a decision: pi never asks, by design."];
+    const out = ["Of ", g.total, " action" + (g.total === 1 ? "" : "s") + ", you decided ", g.you];
+    if (g.rule) out.push("; a rule ", g.rule);
+    if (g.mode) out.push("; the mode ", g.mode);
+    if (g.hook) out.push("; a hook ", g.hook);
+    out.push(".");
+    if (g.none) out.push(" ", g.none, g.none === 1 ? " carries no decision, so who allowed it is unknown." : " carry no decision, so who allowed them is unknown.");
+    if (g.denied) out.push(" ", g.denied, " denied.");
+    return out;
+  }
+
+  function meaning(g) {
+    const note = latest?.kinds?.[g.kind]?.note;
+    if (note) return note;
+    if (g.kind === "pi") return "Nothing is hidden from you here: there is simply no permission step to record.";
+    if (g.kind === "omp") return "OMP asks only as its own settings say, and by default it asks nothing. Where it did not ask, nothing is recorded.";
+    if (g.kind === "amp") return "Amp never asks when something starts it, and an Amp started elsewhere shows no actions here.";
+    if (g.kind === "opencode") return "OpenCode asks as its settings say; where it did not ask, nothing is recorded.";
+    if (g.kind === "codex") return "Codex only tells something when you answered. The rest may be its own approval mode: unknown is not “allowed”.";
+    if (!NAMES[g.kind]) return "Seen by its process only: something cannot read its actions.";
+    if (g.kind !== "claude") return "something sees this agent by its process only.";
+    const without = g.rule + g.mode + g.hook;
+    if (!without) return "Every action with a known decider went through you.";
+    const most = g.rule >= g.mode && g.rule >= g.hook ? "rules" : g.mode >= g.hook ? "its mode" : "hooks";
+    return `${pct(without, g)}% of its actions were decided without you, mostly by ${most}. Look at them again if that feels like too much.`;
+  }
+
+  function fillLayer(g) {
+    const layer = $("layer");
+    const notes = [meaning(g)];
+    if (g.agent && live.size) {
+      const thread = latest?.threads?.find((t) => t.id === g.agent.thread);
+      if (thread && !thread.complete) notes.push("something shows only the last 10 turns: this record holds what it saw while this space was open.");
+    }
+    if (waits(g)) notes.push("It waits for you now: answer in something's window.");
+    layer.replaceChildren(element("h2", "", `${kindName(g.kind)} · ${known(g.name)}`), phrase(element("p"), breakdown(g)),
+      ...notes.map((text) => element("p", "mean", text)));
+  }
+
+  function openLayer(key) {
+    openDial = key;
+    const layer = $("layer");
+    layer.hidden = false;
+    render();
+    const box = dials.get(key)?.node.getBoundingClientRect();
+    if (!box) return;
+    layer.style.left = `${Math.max(16, Math.min(box.left, innerWidth - layer.offsetWidth - 16))}px`;
+    layer.style.top = `${Math.max(16, Math.min(box.bottom + 4, innerHeight - layer.offsetHeight - 16))}px`;
+  }
+
+  function closeLayer() {
+    if (!openDial) return;
+    const dial = dials.get(openDial);
+    openDial = null;
+    $("layer").hidden = true;
+    dial?.node.classList.remove("sel");
+    dial?.node.focus({ preventScroll: true });
+  }
+
+  document.addEventListener("click", (event) => {
+    if (openDial && !$("layer").contains(event.target)) closeLayer();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (openDial) closeLayer();
+    else if (open.length) { open.pop(); render(); }
+  });
+  addEventListener("resize", closeLayer);
+
+  /* The page */
+
+  function render() {
+    const list = view();
+    const groups = tally(list);
+    renderDials(groups);
+    renderTable(list);
+    if (openDial) { const g = groups.find((x) => x.key === openDial); if (g) fillLayer(g); }
+    const older = [...rows.values()].some((row) => row.day !== dayOf(new Date()));
+    $("scope").textContent = (allDays ? "All days" : "Today") + " · who allowed what";
+    $("days").hidden = !older && !allDays;
+    $("days").textContent = allDays ? "Today" : "All days";
+    const notes = [];
+    if (!has("state")) notes.push("This space may not see your agents. You can change that beside it, with Info (⌘I).");
+    if (!has("store")) notes.push("This record lasts only until the space closes: it cannot keep anything.");
+    $("note").hidden = !notes.length;
+    $("note").textContent = notes.join(" ");
+  }
+
+  $("days").addEventListener("click", () => { allDays = !allDays; limit = PAGE; for (const line of lines.values()) line.sig = ""; render(); });
+
+  function update(state) {
+    latest = state;
+    if (!loaded) return;
+    merge(state);
+    render();
+  }
+
+  async function refresh() {
+    try { update(await something.state()); problem(null); } catch (error) { problem(error); render(); }
+  }
+
+  (async function start() {
+    something.on("change", update);
+    something.on("granted", refresh);
+    await load();
+    render();
+    await refresh();
+    // A first look with nothing today shows what is there, rather than an empty page over a known past.
+    if (rows.size && !view().length) { allDays = true; render(); }
+  })();
+</script>
+</body>
+</html>

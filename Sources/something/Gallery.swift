@@ -14,8 +14,8 @@ struct Template: Identifiable {
     /// The templates, in the order they are shown, each with its symbol and its filter on the Templates page: what it
     /// is for, not what it may do.
     private static let table: [(name: String, symbol: String, category: Category)] = [
-        ("agents", "square.3.layers.3d", .agents), ("project", "scope", .agents), ("brief", "note.text", .notes),
-        ("logbook", "clock", .notes), ("stack", "play", .play), ("pet", "sparkle", .play)]
+        ("one-line", "text.quote", .agents), ("deck", "rectangle.stack", .agents), ("council", "person.3", .agents),
+        ("answers", "sparkles", .notes), ("ledger", "checklist", .notes), ("village", "map", .play)]
     static let names = table.map(\.name)
     /// The folder a template declares when it follows one: Use Template writes the folder the person chose in its place.
     static let placeholder = "~/code/your-project"

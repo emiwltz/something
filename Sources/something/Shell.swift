@@ -663,9 +663,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         welcoming = nil
         welcome.close()
         let example = [.example, .skippedToExample].contains(ending)
-        if example, library.entry("agents") != nil {
-            library.select(.space("agents"))
-        } else if example, let template = library.templates.first(where: { $0.id == "agents" }) {
+        if example, library.entry("one-line") != nil {
+            library.select(.space("one-line"))
+        } else if example, let template = library.templates.first(where: { $0.id == "one-line" }) {
             library.use(template)
         } else if ending != .left {
             library.select(.newSpace)

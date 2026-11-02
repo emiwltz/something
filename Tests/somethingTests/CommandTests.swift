@@ -128,7 +128,7 @@ final class FakeDoor: Door {
             ["jsonrpc": "2.0", "method": "notifications/initialized"],
             ["jsonrpc": "2.0", "id": 2, "method": "tools/list"],
             ["jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": ["name": "something_guide", "arguments": [:]]],
-            ["jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": ["name": "something_new", "arguments": ["name": "board", "from": "agents"]]],
+            ["jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": ["name": "something_new", "arguments": ["name": "board", "from": "deck"]]],
             ["jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": ["name": "something_new", "arguments": ["name": "board"]]],
             ["jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": ["name": "something_new", "arguments": ["name": "../board"]]],
         ]
@@ -251,21 +251,18 @@ final class FakeDoor: Door {
     @Test func newFromATemplateCopiesIt() throws {
         let home = Home(prefix: "something-command-")
         defer { home.remove() }
-        let made = Ran(["new", "board", "--from", "agents"], home)
+        let made = Ran(["new", "board", "--from", "deck"], home)
         #expect(made.status == 0 && made.out.contains("something open board"))
         let space = try #require(Spaces(root: home.places.spaces).named("board"))
-        #expect(try Data(contentsOf: space.page) == Data(contentsOf: Home.share.appendingPathComponent("templates/agents.html")))
+        #expect(try Data(contentsOf: space.page) == Data(contentsOf: Home.share.appendingPathComponent("templates/deck.html")))
         let unknown = Ran(["new", "plot", "--from", "garden"], home)
-        #expect(unknown.status == 1 && unknown.err.hasPrefix("There is no template garden. The templates are: agents, project, brief, logbook, stack, pet."))
-        #expect(Command.usage(Home.share).contains("make a space from a template: agents, project, brief, logbook, stack, pet\n"), "the usage names only the templates there are")
+        #expect(unknown.status == 1 && unknown.err.hasPrefix("There is no template garden. The templates are: one-line, deck, council, answers, ledger, village."))
+        #expect(Command.usage(Home.share).contains("make a space from a template: one-line, deck, council, answers, ledger, village\n"), "the usage names only the templates there are")
         #expect(Ran(["new", "plot", "--from", "../template"], home).status == 1)
         #expect(Spaces(root: home.places.spaces).named("plot") == nil)
-        let folder = Ran(["new", "plot", "--from", "agents", "--folder"], home)
+        let folder = Ran(["new", "plot", "--from", "deck", "--folder"], home)
         #expect(folder.status == 2 && folder.err.hasPrefix("A template is one file: leave out --folder"))
         #expect(!made.out.contains("placeholder"))
-        // Project watch follows a folder this home does not have: the command says to write the real one.
-        let project = Ran(["new", "watch", "--from", "project"], home)
-        #expect(project.status == 0 && project.out.contains("It follows ~/code/your-project, a placeholder: write the project folder in its place, then run: something check watch"))
     }
 
     @Test func aNewSpaceIsUndoneWhenTheGrantsCannotBeRead() throws {

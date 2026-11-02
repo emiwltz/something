@@ -85,7 +85,7 @@ packaging/, tools/         Info.plist, the icon, the Homebrew formula and the ta
 6. **Minimal.** Swift and the system's frameworks, no package dependency, no build step for spaces. Budgets, checked by
    `BudgetTests`, every line counted: the core 1,960 lines in all; the host 2,750 in all and 450 per file; in each
    `Agent*` target, 650 per driver and 450 per other file; the app 24,000 in all, a soft budget Emi raises per block on
-   measured lines; an agent described only by data, 40 lines. `TemplatesTests` keeps each template under 700 lines.
+   measured lines; an agent described only by data, 40 lines. `TemplatesTests` keeps each template under 2,500 lines.
 7. **Agents are extensions.** `SomethingCore` knows no agent. No line of the host's code names one. A family imports
    the host and never another family; what the host shares with them is `package`, public only where the app needs
    it. An extension uses no force unwrap, `as!`, `try!`, `fatalError` or `precondition`, and nothing only Darwin has

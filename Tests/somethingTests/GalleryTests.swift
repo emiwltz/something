@@ -101,7 +101,7 @@ struct GalleryTests {
 
         // The window with a space and Info: the My agents template against the invented agents, then a space whose
         // rights were answered, one refused, with its activity.
-        try fixture.space("agents", try String(contentsOf: Home.share.appendingPathComponent("templates/agents.html"), encoding: .utf8))
+        try fixture.space("agents", try String(contentsOf: Stage.oracle.deletingLastPathComponent().appendingPathComponent("agents.html"), encoding: .utf8))
         try fixture.space("draft", page(nil, "<p>Scratch.</p>"))
         let (shell, library, info) = window(fixture)
         let board = try await fixture.window(try #require(library.entry("agents")?.space))

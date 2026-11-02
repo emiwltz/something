@@ -64,8 +64,8 @@ import Testing
         #expect(PaletteModel.score(row("Daily brief"), "dai") == 0 && PaletteModel.score(row("Daily brief"), "bri") == 1)
         #expect(PaletteModel.score(row("Daily brief"), "ly b") == 2 && PaletteModel.score(row("Daily brief", "Agents"), "gent") == 2)
         #expect(PaletteModel.score(row("Daily brief"), "zz") == nil)
-        model.query = "  WATCH "
-        #expect(model.rows.map(\.id) == ["space:project", "template:project"], "case and spaces around do not count; no recent section")
+        model.query = "  COUNCIL "
+        #expect(model.rows.map(\.id) == ["template:council"], "case and spaces around do not count; no recent section")
         model.query = "s"
         let rows = model.rows
         #expect(rows.first?.id == "space:stack", "a name that starts with it first in its section")
@@ -121,14 +121,14 @@ import Testing
         defer { stage.remove() }
         let library = Self.library(stage), model = Self.model(library)
         model.chose = { row in row.open(in: library, send: { Issue.record("a template row sent \($0)") }) { _, _ in Issue.record("a template row asked") } }
-        model.pick(try #require(model.rows.firstIndex { $0.id == "template:pet" }))
-        #expect(library.selection == .templates && library.asked == "pet")
+        model.pick(try #require(model.rows.firstIndex { $0.id == "template:village" }))
+        #expect(library.selection == .templates && library.asked == "village")
         let gallery = Gallery(), host = NSHostingView(rootView: GalleryView(library: library, model: gallery))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 964, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
         (window.contentView, window.isReleasedWhenClosed) = (host, false)
         defer { window.close() }
         host.layoutSubtreeIfNeeded()
-        #expect(await wait { gallery.previewing?.id == "pet" })
+        #expect(await wait { gallery.previewing?.id == "village" })
         #expect(library.asked == nil)
     }
 

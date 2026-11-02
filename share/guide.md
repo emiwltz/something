@@ -44,17 +44,14 @@ also start from one in something's Templates (⇧⌘T, or File › Templates).
 
 | Template | What it is | Rights |
 |---|---|---|
-| `agents` (My agents) | Who works, who waits for you, and a word to each. | `state` (all agents), `send` |
-| `project` (Project watch) | One folder's progress, and the agents working in it. | `state` (one folder), `send`, `launch`, `store` |
-| `brief` (Daily brief) | What your agents did, like a morning paper. | `state` (all agents), `store` |
-| `logbook` (Logbook) | Your notes and your agents’ days, day by day. | `state` (all agents), `store` |
-| `stack` (Stack) | A one-key game for your breaks. | `store` |
-| `pet` (Pebble) | A little creature that lives to the rhythm of your agents. | `state` (all agents), `store` |
+| `one-line` (One Line) | All your agents in one sentence, and the one thing that counts now. | `state` (all agents), `send`, `launch` |
+| `deck` (Decision Deck) | Your agents' questions as a pack of cards, answered in one click. | `state` (all agents), `send`, `launch` |
+| `council` (Council) | One question, three agents side by side, their disagreements marked. | `state` (all agents), `send`, `launch`, `store` |
+| `answers` (Living Answers) | An agent answers with a small tool you can use and pin. | `state` (all agents), `send`, `launch`, `store` |
+| `ledger` (Consent Ledger) | Who decided what, for each action of your agents. | `state` (all agents), `store` |
+| `village` (Prompt Town) | Your agents as villagers in a small drawn town. | `state` (all agents), `send`, `launch`, `store` |
 
 - `something new <name> --from <template>` copies one; a template is one file, so `--folder` is refused with it.
-- Project watch declares the folder `~/code/your-project` in `agents.folders` and `folder`: a placeholder. Write the
-  person's project folder in its place in the copy (until then, `check` warns FOLDER_MISSING); something's Use
-  This Template asks the person for it and does so.
 - What they show of the agents is rebuilt from the state each time they open (the threads' last turns), not only
   what happened while they were open; what they keep goes in `store`.
 

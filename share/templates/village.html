@@ -1,0 +1,2119 @@
+<!doctype html>
+<!-- Prompt Town, a space for something (contract 1). A village drawn like the old handheld RPGs. Each coding agent
+     on this Mac is a villager: it lives in the house of its folder and walks to where its work is (the Forge for
+     commands, the Library for reading, the Tower for the Web, the Pier to think, the tall grass with its sub-agents,
+     the Square when it waits for the person, the Centre when it fails). Its sub-agents are the creatures following it.
+     A finished answer is a letter: the flag of its mailbox goes up. The person walks up to them to read and talk, sets
+     their model, mode and effort, calls new agents to any folder (a house is built for it), and finds a few secrets.
+     Rights: "state" over every agent, "send", "launch", "store" (houses, letters read, badges, the creatures seen). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt Town</title>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "Prompt Town",
+  "description": "Your agents live in a village like an old handheld RPG: they walk to the Forge and the Library, and write you letters. Talk to them, call others over, build houses.",
+  "agents": { "see": "all" },
+  "rights": ["state", "send", "launch", "store"]
+}
+</script>
+<style>
+  [hidden] { display: none !important; }
+  :root { --ink: #262a3a; --soft: #5d6684; --paper: #fbfaf4; --rim: #2c3452; --sky: #7fa8dc; --wait: #e2463c;
+          font: 700 16px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #2b5a34; color: var(--ink); }
+  #world { position: fixed; inset: 0; width: 100vw; height: 100vh; }
+  /* The secret four-green mode: four shades of green. */
+  body.gb #world, body.gb #mini, body.gb #battleArt { filter: grayscale(1) sepia(1) hue-rotate(38deg) saturate(1.7) brightness(.9) contrast(1.15); }
+  #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  #flash.go { animation: flash .4s ease-out; }
+  #flash.dark { background: #10131c; }
+  @keyframes flash { from { opacity: .9; } }
+
+  /* Everything that matters stays above the last 104 points, where something's assistant floats. */
+  #stage { position: fixed; inset: 0 0 104px 0; pointer-events: none; }
+  #stage > *, #bottom > *, .topright > * { pointer-events: auto; }
+
+  /* The box of the old games: a dark rim, a pale inner line, paper inside. */
+  .box { background: var(--paper); color: var(--ink); border: 4px solid var(--rim); border-radius: 10px;
+         box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 5px var(--sky), 0 5px 0 rgba(0, 0, 0, .28); }
+  .hud { position: absolute; top: 14px; left: 14px; padding: 9px 16px 10px; display: flex; flex-direction: column; max-width: calc(100vw - 230px); }
+  .hud b { letter-spacing: .14em; font-size: 14px; }
+  #stats { font-size: 12.5px; font-weight: 600; color: var(--soft); }
+  #stats .alert { color: var(--wait); font-weight: 700; }
+  #stats .alert::before { content: "! "; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .topright { position: absolute; top: 14px; right: 14px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none !important; }
+  .menu-btn, .mail-btn { padding: 8px 14px; font: inherit; font-size: 13px; letter-spacing: .12em; cursor: pointer; }
+  .menu-btn small { font-size: 10.5px; font-weight: 600; color: var(--soft); letter-spacing: .02em; margin-left: 8px; }
+  .menu-btn:hover { color: #3a5fb0; }
+  .mail-btn { color: var(--wait); animation: wiggle 2.6s ease-in-out infinite; }
+  @keyframes wiggle { 0%, 88%, 100% { transform: rotate(0); } 92% { transform: rotate(-5deg); } 96% { transform: rotate(5deg); } }
+  .mini { padding: 6px; line-height: 0; cursor: pointer; }
+  #mini { image-rendering: pixelated; border-radius: 3px; }
+
+  /* The card of whoever is near: like the box of a creature in battle. */
+  .card { position: absolute; top: 96px; left: 14px; width: 310px; padding: 10px 14px 11px; font-size: 13px; pointer-events: none !important; }
+  .card .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .card .nm { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .lv { font-size: 12px; color: var(--soft); white-space: nowrap; }
+  .card .kd { font-size: 11px; letter-spacing: .08em; color: var(--soft); display: flex; align-items: center; gap: 6px; }
+  .card .kd i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  .card .st { margin-top: 5px; font-size: 12.5px; }
+  .card .ac { font-weight: 600; font-size: 12.5px; color: #3d4560; margin-top: 2px; overflow-wrap: anywhere; }
+  .card .mt { font-weight: 600; font-size: 11px; color: var(--soft); margin-top: 6px; overflow-wrap: anywhere; }
+  .card .go { font-size: 11px; color: #3a5fb0; margin-top: 6px; letter-spacing: .04em; }
+
+  #toasts { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none !important; }
+  .toast { padding: 6px 16px 7px; font-size: 13.5px; white-space: nowrap; animation: drop .25s ease-out; }
+  .toast.wait { color: var(--wait); }
+  .toast.badge { color: #7a4fc0; }
+  @keyframes drop { from { transform: translateY(-12px); opacity: 0; } }
+  .problem { position: absolute; top: 80px; left: 50%; transform: translateX(-50%); margin: 0; padding: 9px 16px;
+             color: var(--wait); width: max-content; max-width: min(680px, 90vw); font-size: 14px; }
+
+  .battle { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); padding: 6px; line-height: 0; }
+  #battleArt { width: 480px; height: 224px; max-width: calc(100vw - 60px); image-rendering: pixelated; border-radius: 4px; }
+  .battle.hit #battleArt { animation: shake .3s steps(3); }
+  @keyframes shake { 33% { transform: translateX(-4px); } 66% { transform: translateX(4px); } }
+
+  #bottom { position: absolute; left: 0; right: 0; bottom: 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 18px; }
+  #bottom > * { width: min(880px, 100%); }
+  #choiceRow { display: flex; justify-content: flex-end; }
+  .choices { display: flex; flex-direction: column; min-width: 230px; max-height: min(50vh, 400px); overflow-y: auto; padding: 10px 18px 10px 12px; }
+  .choices.start { position: fixed; top: 60px; right: 14px; }
+  .choices button { font: inherit; color: inherit; background: none; border: 0; text-align: left; letter-spacing: .07em;
+                    padding: 3px 6px 3px 24px; cursor: pointer; position: relative; flex: none; }
+  .choices button.on::before, .panel.pick li.on::before { content: "▶"; position: absolute; left: 4px; top: 4px; font-size: 13px; }
+
+  #talk { display: flex; flex-direction: column; }
+  #tag { align-self: flex-start; margin-left: 18px; padding: 3px 12px 3px; font-size: 12.5px; letter-spacing: .1em; color: #fff;
+         background: var(--rim); border-radius: 7px 7px 0 0; max-width: calc(100% - 36px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #tag i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 8px; }
+  .dialog { position: relative; min-height: 106px; padding: 16px 28px 18px; font-size: 17px; cursor: pointer; }
+  #text { white-space: pre-wrap; overflow-wrap: anywhere; }
+  #more { position: absolute; right: 18px; bottom: 9px; color: var(--wait); font-size: 13px; animation: nudge .6s ease-in-out infinite alternate; }
+  @keyframes nudge { to { transform: translateY(3px); } }
+  #form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; cursor: default; }
+  textarea { font: inherit; font-size: 15px; font-weight: 600; color: var(--ink); background: #fff; border: 2px solid #b7c4dc;
+             border-radius: 6px; padding: 8px 10px; resize: none; }
+  textarea:focus { outline: none; border-color: #3a5fb0; }
+  #form .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #form .hint { flex: 1; font-size: 11.5px; font-weight: 600; color: var(--soft); }
+  .key { font: inherit; font-size: 12.5px; letter-spacing: .1em; padding: 5px 12px; border: 2px solid var(--rim); border-radius: 6px;
+         background: #fff; color: var(--ink); cursor: pointer; box-shadow: 0 2px 0 var(--rim); }
+  .key:hover { background: #eef3fc; }
+  .key.alt { border-color: #8a93ad; box-shadow: 0 2px 0 #8a93ad; }
+  .key.on { background: #eaf0fb; outline: 2px solid #3a5fb0; outline-offset: 1px; }
+
+  .panel { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); width: min(740px, calc(100vw - 36px));
+           max-height: calc(100% - 90px); display: flex; flex-direction: column; padding: 14px 18px 12px; }
+  .phead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  .phead h2 { margin: 0; font-size: 14px; letter-spacing: .14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pmeta { font-size: 12px; font-weight: 600; color: var(--soft); margin: -4px 0 8px; }
+  .panel ol { list-style: none; margin: 0; padding: 0 4px 0 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+  .panel li { position: relative; padding: 5px 8px 6px 26px; border-radius: 6px; flex: none; }
+  .panel li::after { content: ""; display: block; clear: both; }
+  .panel.pick li { cursor: pointer; }
+  .panel.pick li.on { background: #eaf0fb; }
+  .panel li.quiet { color: var(--soft); font-weight: 600; font-size: 14px; }
+  .panel li.sep { margin-top: 6px; padding-left: 10px; border-top: 1px dashed #c9d2e4; border-radius: 0; }
+  .panel li.sep .who { color: #3a5fb0; }
+  .panel li.locked { opacity: .5; }
+  .panel .who { font-size: 11.5px; letter-spacing: .08em; color: var(--soft); display: flex; gap: 8px; }
+  .panel .who time { margin-left: auto; font-weight: 600; letter-spacing: 0; white-space: nowrap; }
+  .panel .who .new { color: var(--wait); }
+  .panel .what { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .panel .g { display: inline-block; width: 14px; text-align: center; }
+  .panel .ico { float: left; width: 36px; height: 30px; margin: 1px 10px 0 -4px; image-rendering: pixelated; object-fit: contain; }
+  .pbody { overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 600; font-size: 14.5px; line-height: 1.6; padding: 2px 6px 6px 2px; }
+  .panel.letter .pbody { background: repeating-linear-gradient(transparent 0 22px, #e1e7f3 22px 23px); line-height: 23px; padding: 0 8px; }
+  .pfoot { margin-top: 8px; font-size: 11.5px; font-weight: 600; color: var(--soft); }
+  .pacts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+
+  .hint-bar { text-align: center; font-size: 12px; font-weight: 600; color: #fff; letter-spacing: .03em; pointer-events: none !important;
+              text-shadow: 0 1px 0 rgba(0, 0, 0, .7), 0 0 8px rgba(0, 0, 0, .5); }
+  @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; } }
+</style>
+</head>
+<body>
+<canvas id="world" aria-label="Your agents' village"></canvas>
+<div id="flash"></div>
+<div id="stage">
+  <div class="box hud"><b>PROMPT TOWN</b><span id="stats">…</span></div>
+  <div class="topright">
+    <button class="box menu-btn" id="menuBtn" type="button" tabindex="-1">MENU<small>Esc</small></button>
+    <button class="box mail-btn" id="mailBtn" type="button" tabindex="-1" hidden></button>
+    <div class="box mini" title="The map: click to go there"><canvas id="mini"></canvas></div>
+  </div>
+  <div class="box card" id="card" hidden></div>
+  <div id="toasts" aria-live="polite"></div>
+  <p class="box problem" id="problem" role="alert" hidden></p>
+  <div class="box battle" id="battle" hidden><canvas id="battleArt" width="240" height="112"></canvas></div>
+  <section class="box panel" id="panel" hidden>
+    <div class="phead"><h2 id="ptitle"></h2><button class="key alt" id="pclose" type="button" tabindex="-1">CLOSE</button></div>
+    <div class="pmeta" id="pmeta"></div>
+    <ol id="plist"></ol>
+    <div class="pbody" id="pbody"></div>
+    <div class="pfoot" id="pfoot"></div>
+    <div class="pacts" id="pacts"></div>
+  </section>
+  <div id="bottom">
+    <div id="choiceRow"><div class="box choices" id="choices" hidden></div></div>
+    <div id="talk" hidden>
+      <div id="tag"></div>
+      <div class="box dialog" id="dialog">
+        <div id="text" aria-live="polite"></div><span id="more" hidden>▼</span>
+        <div id="form" hidden>
+          <textarea id="input" rows="2" aria-label="Your message"></textarea>
+          <div class="row"><span class="hint">⏎ send · ⇧⏎ new line · Esc cancel</span><span id="btns"></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="hint-bar" id="hint">Arrow keys or WASD: walk · Shift: run · Space: talk · click: go there · Esc: menu</div>
+  </div>
+</div>
+<script>
+"use strict";
+// something.js is injected before this script. Every call returns a promise; a rejection carries .code and .message,
+// one sentence for the person: the village says it in a dialog box, never swallows it.
+const S = window.something;
+const $ = (id) => document.getElementById(id);
+const make = (tag, className, text) => Object.assign(document.createElement(tag), { className: className || "", textContent: text ?? "" });
+
+/* ---------- Words ---------- */
+
+const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP" };
+const label = (kind) => NAMES[kind] || "Other agent";            // a kind this page does not know is "other agent"
+const KIND_COLOR = { claude: "#d97757", codex: "#66779c", opencode: "#2f8f83", pi: "#8a5cd0", omp: "#c9a227" };
+const kindColor = (kind) => KIND_COLOR[kind] || "#8d8d96";
+const WORDS = ["waiting", "working", "idle", "done", "error", "interrupted", "unknown"];
+const word = (s) => WORDS.includes(s) ? s : "unknown";
+const SAYS = { waiting: "waiting for you", working: "working", idle: "free", done: "finished", error: "in error", interrupted: "interrupted", unknown: "unknown state" };
+const MARK = { waiting: ["!", "#e2463c"], working: ["…", "#2f9a52"], idle: ["•", "#5d6684"], done: ["z", "#5070c8"],
+               error: ["✗", "#e2463c"], interrupted: ["~", "#8a8a96"], unknown: ["?", "#8a8a96"] };
+// A right counts when granted plainly ("send") or for this kind ("send:claude"). Read granted, never the declaration.
+const has = (right, kind) => !!S && S.granted.rights.some((r) => r === right || (kind && r === right + ":" + kind));
+const mayAny = (right) => !!S && S.granted.rights.some((r) => r === right || r.startsWith(right + ":"));
+const tilde = (path) => path ? path.replace(/^\/Users\/[^/]+/, "~") : "unknown folder";
+const base = (path) => path ? path.replace(/\/+$/, "").split("/").pop() || path : null;
+// One line of at most n characters, counted as a person sees them.
+function line(text, n = 150) {
+  const chars = Array.from((text || "").replace(/\s+/g, " ").trim());
+  return chars.length > n ? chars.slice(0, n - 1).join("") + "…" : chars.join("");
+}
+function hash(text) { let h = 2166136261; for (const ch of String(text)) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function noise(x, y, k = 0) {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(k, 1442695041)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+const pad = (n) => String(n).padStart(2, "0");
+const hhmm = (iso) => { if (!iso) return "--:--"; const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const dayOf = (iso) => { if (!iso) return "at an unknown date"; const d = new Date(iso); return d.toDateString() === new Date().toDateString() ? `today at ${hhmm(iso)}` : `on ${d.getDate()}/${d.getMonth() + 1} at ${hhmm(iso)}`; };
+function ago(iso) {
+  if (!iso) return "unknown";
+  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+  return s < 60 ? "just now" : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`;
+}
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const anyOf = (list) => list[Math.floor(Math.random() * list.length)];
+const canvasOf = (w, h) => Object.assign(document.createElement("canvas"), { width: w, height: h });
+
+/* ---------- The village: 44 × 30 tiles of 16 pixels ---------- */
+
+const T = 16, W = 44, H = 30;
+const GRASS = 0, TALL = 1, PATH = 2, WATER = 3, TREE = 4, FLOWER = 5, WALL = 6, SIGN = 7, PAVE = 8, PIER = 9, PROP = 10;
+const ground = new Uint8Array(W * H);
+const tileAt = (x, y) => x < 0 || y < 0 || x >= W || y >= H ? TREE : ground[y * W + x];
+const lay = (x, y, w, h, t) => { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) ground[j * W + i] = t; };
+const tk = (x, y) => x + "," + y;
+lay(0, 0, W, 1, TREE); lay(0, H - 1, W, 1, TREE); lay(0, 0, 1, H, TREE); lay(W - 1, 0, 1, H, TREE);
+lay(21, 1, 2, H - 2, PATH); lay(1, 13, W - 2, 2, PATH);                       // the two avenues
+lay(2, 6, 19, 1, PATH); lay(23, 7, 19, 1, PATH); lay(2, 20, 19, 1, PATH); lay(23, 20, 8, 1, PATH);
+lay(31, 16, 9, 9, PAVE);                                                       // the Square
+lay(2, 22, 8, 6, WATER); lay(6, 22, 1, 3, PIER);                               // the pond and its pier
+lay(12, 22, 8, 6, TALL);                                                       // the tall grass
+lay(20, 12, 4, 4, PATH);                                                       // a small plaza where the avenues cross
+
+// Buildings that never move; each is where some kind of work happens.
+const BUILDINGS = [
+  { id: "library", x: 24, y: 2, w: 6, h: 4, name: "LIBRARY", place: "library",
+    style: { roof: "#3f7f8c", roofDark: "#2c5f6a", roofLight: "#78b6c2", wall: "#e9e2d0", wallLine: "#d8cfb8", wallShade: "#c9bea2",
+             windows: [7, 75], door: { x: 34, w: 28, kind: "double" }, plate: 64, pillars: [26, 66] } },
+  { id: "forge", x: 31, y: 2, w: 5, h: 4, name: "FORGE", place: "forge",
+    style: { roof: "#5a5a66", roofDark: "#40404a", roofLight: "#8a8a98", wall: "#b86a4a", wallLine: "#a25a3e", wallShade: "#8e4c33",
+             windows: [56], door: { x: 33, w: 14, kind: "forge" }, plate: 40, chimney: 62 } },
+  { id: "lab", x: 3, y: 16, w: 6, h: 4, name: "LAB", place: "lab",
+    style: { roof: "#6a7fa8", roofDark: "#4f6188", roofLight: "#9fb2d8", wall: "#f4f4f0", wallLine: "#e2e2dc", wallShade: "#d0d0c8",
+             windows: [7, 56, 74], door: { x: 35, w: 10, kind: "glass" }, plate: 40 } },
+  { id: "centre", x: 25, y: 16, w: 5, h: 4, name: "CENTRE", place: "centre",
+    style: { roof: "#e65a52", roofDark: "#b8403a", roofLight: "#f58a80", wall: "#f6f6f2", wallLine: "#e8e8e2", wallShade: "#dcdcd4",
+             stripe: "#e05050", windows: [8, 56], door: { x: 32, w: 16, kind: "glass", h: 23 }, plate: 44 } },
+  { id: "tower", x: 38, y: 1, w: 3, h: 5, name: "WAVES", place: "tower", tower: true },
+];
+BUILDINGS.forEach((b) => lay(b.x, b.y, b.w, b.h, WALL));
+lay(26, 6, 2, 1, PATH); lay(33, 6, 1, 1, PATH); lay(39, 6, 1, 1, PATH);
+// Eight plots: a folder an agent works in gets one, and a house is built on it.
+const ROOFS = [["#d8574f", "#a83c37", "#ef8a7e"], ["#4f7fd0", "#355ea3", "#86aaf0"], ["#4fa25e", "#367a43", "#84cc8c"], ["#9a62c8", "#74449c", "#c49ae8"],
+               ["#e0a030", "#b07a1c", "#f4c870"], ["#3fa6a0", "#2b7a76", "#7cd0ca"], ["#d8608c", "#a8426a", "#f098b8"], ["#7a6a5a", "#5a4c40", "#a8988a"]];
+const PLOTS = [[3, 2], [9, 2], [15, 2], [3, 8], [9, 8], [15, 8], [25, 9], [31, 9]].map(([x, y], i) => ({ i, x, y, w: 4, h: 3,
+  front: [x + 1, y + 3], sign: [x - 1, y + 2], spots: [[x, y + 3, "down"], [x + 2, y + 3, "down"], [x + 3, y + 3, "down"]], folder: null, build: 0,
+  style: { roof: ROOFS[i][0], roofDark: ROOFS[i][1], roofLight: ROOFS[i][2], wall: "#f1e4c4", wallLine: "#e2d2ae", wallShade: "#d2bf94",
+           windows: [38], door: { x: 19, w: 10, kind: "wood" }, roofH: 22, chimney: 46, box: true } }));
+PLOTS.forEach((p) => { lay(p.x, p.y, 4, 3, WALL); lay(p.x + 1, p.y + 3, 1, p.y === 8 ? 2 : 1, PATH); lay(p.sign[0], p.sign[1], 1, 1, SIGN); });
+// Things you can bump into and look at.
+const PROPS = new Map();
+function prop(type, x, y, w = 1, h = 1, extra = {}) {
+  const p = { type, x, y, w, h, ...extra };
+  for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) { ground[j * W + i] = PROP; PROPS.set(tk(i, j), p); }
+  return p;
+}
+prop("fountain", 34, 19, 3, 3);
+prop("board", 35, 17); prop("anvil", 36, 5); prop("bench", 32, 24); prop("bench", 38, 24); prop("bench", 14, 16);
+prop("tent", 24, 22, 2, 2, { color: "#e08a3c", dark: "#a85e20" }); prop("tent", 28, 22, 2, 2, { color: "#3fb0b8", dark: "#2a7c82" });
+const FIRE = prop("fire", 27, 24);
+const CANDY = prop("candy", 42, 10);
+const SIGNS = new Map([
+  [tk(23, 12), ["PROMPT TOWN", "The village where your agents live, work and write to you."]],
+  [tk(23, 1), ["↑ TO THE CLOUD", "Road under construction since 2006."]],
+  [tk(23, 28), ["ROUTE 404", "Path not found. Please come back later."]],
+  [tk(11, 21), ["TALL GRASS", "The companions romp here. Watch out for wild bugs!"]],
+  [tk(7, 21), ["THOUGHT PIER", "Agents come here to think. They say you can fish here."]],
+  [tk(32, 15), ["REQUEST SQUARE", "Those waiting for you line up around the fountain."]],
+  [tk(23, 23), ["CAMPGROUND", "For agents whose folder does not have a house yet."]],
+]);
+for (const k of SIGNS.keys()) { const [x, y] = k.split(",").map(Number); lay(x, y, 1, 1, SIGN); }
+const SIMULARBRE = [18, 16];
+[[10, 16], [11, 16], [10, 18], [19, 18], SIMULARBRE, [41, 2], [42, 4], [1, 21]].forEach(([x, y]) => lay(x, y, 1, 1, TREE));
+lay(37, 9, 5, 3, FLOWER); lay(40, 25, 3, 3, FLOWER);
+[[3, 1], [4, 1], [10, 1], [19, 1], [34, 1], [20, 7], [7, 12], [13, 12], [1, 17], [12, 15], [17, 19], [2, 28], [9, 28], [11, 28], [20, 26],
+ [20, 27], [31, 26], [33, 27], [36, 27], [41, 15], [42, 16], [24, 15], [42, 21]].forEach(([x, y]) => lay(x, y, 1, 1, FLOWER));
+const WALKABLE = new Set([GRASS, TALL, PATH, FLOWER, PAVE, PIER]);
+const walkable = (x, y) => WALKABLE.has(tileAt(x, y));
+const inSquare = (x, y) => x >= 31 && x <= 39 && y >= 16 && y <= 24;
+
+// Where agents go, by what they do. Each slot says where to stand and which way to look.
+const PLACES = {
+  library: { at: "at the Library", slots: [[25, 6, "up"], [28, 6, "up"], [26, 6, "up"], [27, 6, "up"], [29, 6, "up"], [24, 6, "up"]] },
+  forge: { at: "at the Forge", slots: [[32, 6, "up"], [34, 6, "up"], [33, 6, "up"], [35, 6, "up"], [31, 6, "up"]] },
+  tower: { at: "at the Waves Tower", slots: [[38, 6, "up"], [40, 6, "up"], [39, 6, "up"], [41, 6, "up"]] },
+  pier: { at: "at the Thought Pier", slots: [[6, 24, "down"], [6, 23, "down"], [3, 21, "down"], [9, 21, "down"], [4, 21, "down"]] },
+  prairie: { at: "in the tall grass", slots: [[13, 23, "down"], [16, 23, "down"], [18, 25, "down"], [14, 26, "down"], [17, 27, "down"], [12, 25, "down"]] },
+  square: { at: "on the Request Square", slots: [[33, 19, "right"], [33, 20, "right"], [33, 21, "right"], [37, 19, "left"], [37, 20, "left"],
+    [37, 21, "left"], [34, 22, "up"], [35, 22, "up"], [36, 22, "up"], [34, 18, "down"], [36, 18, "down"]] },
+  centre: { at: "at the Centre", slots: [[25, 20, "up"], [26, 20, "up"], [28, 20, "up"], [29, 20, "up"]] },
+  lab: { at: "at the Lab", slots: [[7, 20, "down"], [4, 20, "down"], [8, 21, "down"]] },
+  camp: { at: "at the campground", slots: [[26, 24, "right"], [28, 24, "left"], [27, 25, "up"], [26, 25, "right"], [28, 25, "left"], [27, 23, "down"]] },
+  home: { at: "at home" },
+};
+const PAPI_SPOT = [20, 16], NURSE_SPOT = [30, 19], SPAWN = [21, 16], CAT_HOME = [15, 18];
+const KEEP_FREE = new Set([...PLOTS.map((p) => p.front), [27, 20], [5, 20], [6, 21], SPAWN].map(([x, y]) => tk(x, y)));
+// A slot on something solid would trap its agent: say so loudly while building the village.
+[...Object.values(PLACES).flatMap((p) => p.slots || []), ...PLOTS.flatMap((p) => p.spots)].forEach(([x, y]) => { if (!walkable(x, y)) console.error("Slot on a solid tile", x, y); });
+
+/* ---------- Pixel art: every sprite is drawn from rows of letters ---------- */
+
+function paint(rows, pal, w) {
+  const c = canvasOf(w, rows.length), g = c.getContext("2d");
+  rows.forEach((row, y) => { for (let x = 0; x < w; x++) { const col = pal[row[x]]; if (col) { g.fillStyle = col; g.fillRect(x, y, 1, 1); } } });
+  return c;
+}
+const mirror = (half) => half + Array.from(half).reverse().join("");
+const flipRow = (row) => Array.from(row.padEnd(16, ".")).reverse().join("");
+function rect(g, x, y, w, h, color) { g.fillStyle = color; g.fillRect(x, y, w, h); }
+
+// People: k outline, h cap, c cap badge, a hair, s skin, b shirt, p trousers.
+const BODY = ["...kkbbb", "..kbbbbb", ".ksbbbbb", "..kkpppp"].map(mirror);
+const FACING = {
+  down: [...["......kk", "....kkhh", "...khhhh", "..khhhcc", "..khhhhh", "..kkkkkk", "..kaasss", "..kassks", "..kassks", "...kssss"].map(mirror), ...BODY],
+  up: [...["......kk", "....kkhh", "...khhhh", "..khhhhh", "..khhhhh", "..kkkkkk", "..kaaaaa", "..kaaaaa", "..kaaaaa", "...kaaaa"].map(mirror), ...BODY],
+  right: [".....kkkk.......", "...kkhhhhkk.....", "..khhhhhhhhk....", "..khhhhhhhcck...", "..khhhhhhhhhk...", "..kkkkkkkkkkkkk.",
+          "..kaaassssssk...", "..kaaassssksk...", "..kaaassssssk...", "...kaasssssk....", "....kkbbbbk.....", "....kbbbbbbk....",
+          "....kbbsbbbk....", "....kkppppk....."],
+};
+const LEGS = {
+  front: [["...kpppkkpppk...", "...kkkk..kkkk..."], ["...kpppkkpppk...", "...kkkk........."], ["...kpppkkpppk...", ".........kkkk..."]],
+  side: [[".....kpppk......", ".....kkkkk......"], ["....kpk..kpk....", "....kkk..kkk...."], [".....kpppk......", ".....kkkkk......"]],
+};
+const people = new Map();
+function personSprite(pal, dir, frame) {
+  const id = pal.id + dir + frame;
+  if (!people.has(id)) {
+    const side = dir === "left" || dir === "right";
+    let rows = [...FACING[dir === "left" ? "right" : dir], ...LEGS[side ? "side" : "front"][frame]];
+    if (dir === "left") rows = rows.map(flipRow);
+    people.set(id, paint(rows, pal, 16));
+  }
+  return people.get(id);
+}
+const look = (id, cap, hair, skin, shirt, trousers, badge = "#f8f8f8") => ({ id, k: "#262836", h: cap, c: badge, a: hair, s: skin, b: shirt, p: trousers });
+const SKINS = ["#f6c8a0", "#e8b088", "#c98e64", "#8f5f3e"];
+const HAIRS = ["#3a2a20", "#6b4423", "#c8903f", "#2a2a3a", "#a5402e", "#e6d8b0"];
+const SHIRTS = ["#4f86d9", "#59b36a", "#e0b040", "#d9606a", "#8a6fd6", "#3fb0b8", "#e08a3c"];
+const TROUSERS = ["#3b4a7a", "#4a3b2a", "#2f3a33", "#5a4a6a"];
+// The cap says the kind (Claude Code terracotta, Codex slate…); the rest is the agent's own, from its id.
+function agentLook(a) {
+  const n = hash(a.id);
+  return look(a.kind + a.id, kindColor(a.kind), HAIRS[n % 6], SKINS[(n >>> 4) % 4], SHIRTS[(n >>> 8) % 7], TROUSERS[(n >>> 12) % 4]);
+}
+const PLAYER_LOOK = look("player", "#e2463c", "#3a2a20", "#f6c8a0", "#3d6fd0", "#2f3550");
+const PAPI_LOOK = look("papi", "#8a6a48", "#ececec", "#e8b088", "#7a5a3a", "#4a4a5a", "#8a6a48");
+const NURSE_LOOK = look("nurse", "#f8f8f8", "#f08cb0", "#f6c8a0", "#f6b8d0", "#f6b8d0", "#e2463c");
+const PROF_LOOK = look("prof", "#7a5230", "#7a5230", "#f6c8a0", "#f4f4f4", "#5a6a8a", "#7a5230");
+
+// Creatures (sub-agents): k outline, b body, L belly, w eye light, g leaf.
+const CREATURE = {
+  ears: ["..k...", ".kbk..", ".kbbkk", "kbbbbb", "kbbwkb", "kbbkkb", "kbbbbb", "kbbLLL", ".kbbLL", "..kkkk"],
+  sprout: [".....k", "....kg", "..kkkk", ".kbbbb", "kbbwkb", "kbbkkb", "kbbbbb", "kbbLLL", ".kbbLL", "..kkkk"],
+};
+const CREATURE_COLORS = [["#f4cf3a", "#fbe9a0"], ["#5aa2ee", "#b5d8fa"], ["#6cc060", "#bfe8a8"], ["#f190bf", "#fbd0e4"], ["#f09a4c", "#fbd2a8"], ["#a98be0", "#ddd0f6"]];
+const creatures = new Map();
+function creatureSprite(seed, asleep) {
+  const id = (seed % 2) + "-" + ((seed >>> 1) % 6) + asleep;
+  if (!creatures.has(id)) {
+    const rows = (seed % 2 ? CREATURE.ears : CREATURE.sprout).slice();
+    if (asleep) { rows[4] = "kbbbbb"; rows[5] = "kbbkkb"; }
+    const [b, L] = CREATURE_COLORS[(seed >>> 1) % 6];
+    creatures.set(id, paint(rows.map(mirror), { k: "#283040", b, L, w: "#ffffff", g: "#4fae4a" }, 12));
+  }
+  return creatures.get(id);
+}
+const SYLLABLES = ["Pi", "Ka", "Bu", "Lu", "Mo", "Zi", "Ro", "Ta", "Ne", "Fu", "Gre", "Lin", "Pa", "Do", "Ki", "Sa"];
+const ENDINGS = ["rob", "mon", "zor", "rix", "bel", "dou", "nyx", "pou", "lin", "tik"];
+const creatureName = (seed) => SYLLABLES[seed % 16] + ENDINGS[(seed >>> 4) % 10];
+const CAT = paint([".k........k.", ".kk......kk.", ".kokkkkkkok.", "kooooooooook", "kowkooookwok", "kooooooooook", "kooooppooook",
+  ".kooooooook.", "..kowoowok..", "...kkkkkk..."], { k: "#3a2a20", o: "#f0a050", w: "#ffffff", p: "#f08cb0" }, 12);
+
+// Marks above heads: "!" waits for you, "z" sleeps, "x" error, "?" unknown, "~" interrupted; and what the work is.
+const GLYPHS = {
+  "!": ["..k..", "..k..", "..k..", ".....", "..k.."], "?": [".kkk.", "....k", "..kk.", ".....", "..k.."],
+  z: ["kkkk.", "..k..", ".k...", "kkkk."], x: ["k...k", ".k.k.", "..k..", ".k.k.", "k...k"], "~": [".....", ".k...", "k.k.k", "...k."],
+  hammer: [".kkk.", ".kkkk", "..k..", "..k..", "..k.."], book: [".....", "kk.kk", "k.k.k", "k.k.k", "kkkkk"],
+  wave: ["..k..", ".k.k.", "k.k.k", "..k..", "..k.."], pencil: ["....k", "...kk", "..kk.", ".kk..", "k...."],
+  ball: [".kkk.", "kkkkk", "k...k", "k...k", ".kkk."], letter: ["kkkkk", "kk.kk", "k.k.k", "k...k", "kkkkk"],
+};
+const BUBBLE = { waiting: ["!", "#e2463c"], done: ["z", "#5070c8"], error: ["x", "#e2463c"], interrupted: ["~", "#8a8a96"], unknown: ["?", "#8a8a96"] };
+const WORK_ICON = { forge: ["hammer", "#c0602a"], library: ["book", "#2c7f8c"], tower: ["wave", "#7a5cd0"], home: ["pencil", "#2f9a52"],
+                    camp: ["pencil", "#2f9a52"], lab: ["pencil", "#2f9a52"], prairie: ["ball", "#e2463c"], pier: ["…", "#5070c8"] };
+const bubbles = new Map();
+function bubbleSprite([glyph, color], dots) {
+  const id = glyph + color + dots;
+  if (!bubbles.has(id)) {
+    const rows = ["..kkkkkkk..", ".kwwwwwwwk.", "kwwwwwwwwwk", "kwwwwwwwwwk", "kwwwwwwwwwk", "kwwwwwwwwwk", "kwwwwwwwwwk",
+                  "kwwwwwwwwwk", ".kwwwwwwwk.", "..kkkwkkk..", "....kwk....", ".....k....."];
+    const c = paint(rows, { k: "#2a2a38", w: "#ffffff" }, 11), g = c.getContext("2d");
+    g.fillStyle = color;
+    if (glyph === "…") for (let i = 0; i < dots; i++) g.fillRect(2 + i * 3, 5, 2, 2);
+    else GLYPHS[glyph].forEach((row, y) => { for (let x = 0; x < 5; x++) if (row[x] === "k") g.fillRect(3 + x, 2 + y, 1, 1); });
+    bubbles.set(id, c);
+  }
+  return bubbles.get(id);
+}
+
+const TREE_ART = paint(["....kkkkkkkk....", "..kkmmmmllmmkk..", ".kmmmmllllmmmmk.", ".kmmmllllmmmmdk.", "kmmmmmllmmmmmddk",
+  "kmmmmmmmmmmmdddk", "kdmmmmmmmmmddddk", "kddmmmmmmmdddddk", ".kddmmmmddddddk.", ".kdddddddddddk..", "..kkddddddddkk..",
+  "....kkkttkkk....", "......kttk......", "......kTtk......", ".....kkTTkk.....", "................"],
+  { k: "#1f4a2a", d: "#2e7a3c", m: "#44a14e", l: "#72c46a", t: "#86562f", T: "#5d3a1e" }, 16);
+const SIGN_ART = paint(["................", "................", ".kkkkkkkkkkkkkk.", ".kbbbbbbbbbbbbk.", ".kbLLLLLLLLLLbk.", ".kbbbbbbbbbbbbk.",
+  ".kbLLLLLLLbbbbk.", ".kbbbbbbbbbbbbk.", ".kkkkkkkkkkkkkk.", "......kppk......", "......kppk......", "......kppk......",
+  ".....kkppkk.....", "................"], { k: "#3a2a1e", b: "#d9a660", L: "#a8743e", p: "#8a5a30" }, 16);
+const PROP_ART = {
+  anvil: paint(["", "", "", "", "", "..kkkkkkkkkkk...", ".kmmmmmmmmmmmkk.", "kmllllllllllmmk.", ".kkmmmmmmmmkkk..", "...kmmmmmmk.....",
+    "....kmmmmk......", "...kkmmmmkk.....", "..kmmmmmmmmk....", "..kkkkkkkkkk....", "", ""], { k: "#1e1e28", m: "#6a6f80", l: "#a8aec0" }, 16),
+  board: paint(["", ".kkkkkkkkkkkkkk.", ".kbbbbbbbbbbbbk.", ".kbwwwwbbwwwwbk.", ".kbwLLwbbwLLwbk.", ".kbwwwwbbwLLwbk.", ".kbwLLwbbwwwwbk.",
+    ".kbwwwwbbbbbbbk.", ".kbbbbbbwwwwbbk.", ".kbbbbbbwLLwbbk.", ".kkkkkkkkkkkkkk.", "...kpk....kpk...", "...kpk....kpk...", "...kpk....kpk...",
+    "..kkpkk..kkpkk..", ""], { k: "#3a2a1e", b: "#b98a55", w: "#f6f2e4", L: "#9aa0b8", p: "#8a5a30" }, 16),
+  bench: paint(["", "", "", "", "", "kkkkkkkkkkkkkkkk", "kbbbbbbbbbbbbbbk", "kkkkkkkkkkkkkkkk", "kbbbbbbbbbbbbbbk", "kkkkkkkkkkkkkkkk",
+    ".kp..........pk.", ".kp..........pk.", ".kk..........kk.", "", "", ""], { k: "#3a2a1e", b: "#c88a50", p: "#6a4a30" }, 16),
+};
+const BALL = paint(["..kkkk..", ".krrrwk.", "krrrrrrk", "kkkwwkkk", "kwkwwkwk", "kwwkkwwk", ".kwwwwk.", "..kkkk.."], { k: "#222", r: "#e2463c", w: "#fff" }, 8);
+function tentArt(color, dark) {
+  const c = canvasOf(32, 32), g = c.getContext("2d");
+  for (let y = 3; y < 30; y++) {
+    const half = Math.round((y - 3) * 0.56);
+    rect(g, 16 - half - 1, y, half * 2 + 2, 1, "#2a2a38"); rect(g, 16 - half, y, half, 1, color); rect(g, 16, y, half, 1, dark);
+  }
+  for (let y = 16; y < 30; y++) { const half = Math.round((y - 16) * 0.32); rect(g, 16 - half, y, half * 2, 1, "#3a2a28"); }
+  rect(g, 15, 0, 2, 4, "#6a4a30"); rect(g, 17, 0, 5, 3, "#e2463c");
+  return c;
+}
+
+/* ---------- Tiles, drawn once into the map ---------- */
+
+function grass(g, X, Y, x, y) {
+  rect(g, X, Y, T, T, "#8fd06e");
+  for (let i = 0; i < 3; i++) {
+    const n = noise(x, y, i), gx = X + 1 + n % 12, gy = Y + 1 + (n >>> 8) % 12;
+    rect(g, gx, gy + 1, 1, 2, "#6db35a"); rect(g, gx + 1, gy + 2, 1, 1, "#6db35a"); rect(g, gx + 2, gy, 1, 3, "#6db35a");
+  }
+  const n = noise(x, y, 7);
+  if (n % 2) rect(g, X + n % 15, Y + (n >>> 5) % 15, 1, 1, "#b8ea98");
+}
+function pave(g, X, Y, x, y) {
+  rect(g, X, Y, T, T, "#ddd6c6");
+  rect(g, X, Y + 7, T, 1, "#c8c0ae"); rect(g, X, Y + 15, T, 1, "#c8c0ae");
+  rect(g, X + (y % 2 ? 3 : 11), Y, 1, 7, "#c8c0ae"); rect(g, X + (y % 2 ? 11 : 3), Y + 8, 1, 7, "#c8c0ae");
+  if (noise(x, y, 4) % 3 === 0) rect(g, X + 5, Y + 3, 2, 1, "#ece7da");
+}
+function tallArt(g, X, Y) {
+  rect(g, X, Y, T, T, "#76c45c");
+  for (const [qx, qy] of [[0, 0], [8, 0], [0, 8], [8, 8]]) {
+    const a = X + qx, b = Y + qy;
+    rect(g, a + 1, b + 3, 1, 5, "#3e8a3e"); rect(g, a + 2, b + 1, 1, 7, "#58ad4a"); rect(g, a + 3, b + 4, 1, 4, "#3e8a3e");
+    rect(g, a + 5, b + 2, 1, 6, "#3e8a3e"); rect(g, a + 6, b, 1, 8, "#58ad4a"); rect(g, a + 7, b + 3, 1, 5, "#3e8a3e");
+    rect(g, a + 2, b + 1, 1, 1, "#a6de88"); rect(g, a + 6, b, 1, 1, "#a6de88");
+  }
+}
+const TALL_TILE = canvasOf(T, T); tallArt(TALL_TILE.getContext("2d"), 0, 0);
+function tile(g, x, y, frame) {
+  const X = x * T, Y = y * T, t = tileAt(x, y);
+  if (t === PATH) {
+    rect(g, X, Y, T, T, "#ead9a6");
+    for (let i = 0; i < 3; i++) { const n = noise(x, y, i + 20); rect(g, X + n % 15, Y + (n >>> 8) % 15, 1 + (n >>> 16) % 2, 1, "#d5bf88"); }
+    const edge = "#cbb27c", open = (i, j) => [PATH, PAVE].includes(tileAt(i, j));
+    if (!open(x, y - 1)) rect(g, X, Y, T, 1, edge);
+    if (!open(x, y + 1)) rect(g, X, Y + 15, T, 1, edge);
+    if (!open(x - 1, y)) rect(g, X, Y, 1, T, edge);
+    if (!open(x + 1, y)) rect(g, X + 15, Y, 1, T, edge);
+  } else if (t === WATER || t === PIER) {
+    rect(g, X, Y, T, T, "#5aa6e6");
+    const o = frame ? 4 : 0;
+    rect(g, X + 2 + o, Y + 4, 5, 1, "#a6d4f7"); rect(g, X + 9 - o, Y + 11, 4, 1, "#a6d4f7");
+    const wet = (i, j) => [WATER, PIER].includes(tileAt(i, j));
+    if (!wet(x, y - 1)) { rect(g, X, Y, T, 1, "#2f6fb0"); rect(g, X, Y + 1, T, 1, "#d8eefb"); }
+    if (!wet(x, y + 1)) rect(g, X, Y + 15, T, 1, "#2f6fb0");
+    if (!wet(x - 1, y)) { rect(g, X, Y, 1, T, "#2f6fb0"); rect(g, X + 1, Y + 1, 1, T - 1, "#d8eefb"); }
+    if (!wet(x + 1, y)) rect(g, X + 15, Y, 1, T, "#2f6fb0");
+    if (t === PIER) {
+      rect(g, X + 2, Y, 12, T, "#5a3a20"); rect(g, X + 3, Y, 10, T, "#c4925a");
+      for (let j = 0; j < T; j += 4) rect(g, X + 3, Y + j, 10, 1, "#9a6a3a");
+      if (tileAt(x, y + 1) !== PIER) { rect(g, X + 2, Y + 13, 2, 3, "#5a3a20"); rect(g, X + 12, Y + 13, 2, 3, "#5a3a20"); }
+    }
+  } else if (t === TALL) tallArt(g, X, Y);
+  else if (t === PAVE || (t === PROP && inSquare(x, y))) pave(g, X, Y, x, y);
+  else {
+    grass(g, X, Y, x, y);
+    if (t === TREE) g.drawImage(TREE_ART, X, Y);
+    if (t === SIGN) g.drawImage(SIGN_ART, X, Y + 1);
+    if (t === FLOWER) {
+      const petal = ["#f4f4f4", "#f06a6a", "#f6c84a"][noise(x, y, 3) % 3];
+      for (const [fx, fy] of [[3, 3], [10, 9]]) {
+        const a = X + fx + frame, b = Y + fy;
+        rect(g, a, b, 1, 1, petal); rect(g, a + 2, b, 1, 1, petal); rect(g, a, b + 2, 1, 1, petal); rect(g, a + 2, b + 2, 1, 1, petal);
+        rect(g, a + 1, b + 1, 1, 1, petal === "#f6c84a" ? "#e06a2a" : "#f6d04a"); rect(g, a + 1, b + 3, 1, 2, "#4e9a40");
+      }
+    }
+  }
+}
+const maps = new Map();
+function mapArt(frame) {
+  if (!maps.has(frame)) {
+    const c = canvasOf(W * T, H * T), g = c.getContext("2d");
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) tile(g, x, y, frame);
+    maps.set(frame, c);
+  }
+  return maps.get(frame);
+}
+const FOREST = canvasOf(T, T);
+(() => { const g = FOREST.getContext("2d"); grass(g, 0, 0, 0, 0); g.drawImage(TREE_ART, 0, 0); })();
+
+/* ---------- Buildings ---------- */
+
+const M = 8;                                          // room above a building for its chimney or antenna
+function paintBuilding(w, h, s, lit, shut) {
+  const c = canvasOf(w, h + M), g = c.getContext("2d"), K = "#2a2a38", Y = M, roofH = s.roofH ?? Math.round(h * 0.45);
+  rect(g, 2, Y + roofH - 3, w - 4, h - roofH + 3, K); rect(g, 3, Y + roofH - 2, w - 6, h - roofH + 1, s.wall);
+  for (let y = Y + roofH + 3; y < Y + h - 4; y += 5) rect(g, 3, y, w - 6, 1, s.wallLine);
+  rect(g, 3, Y + h - 4, w - 6, 3, s.wallShade);
+  if (s.stripe) rect(g, 3, Y + h - 9, w - 6, 6, s.stripe);
+  for (const px of s.pillars || []) { rect(g, px - 1, Y + roofH - 2, 6, h - roofH, K); rect(g, px, Y + roofH - 2, 4, h - roofH - 1, "#fbf8ef"); rect(g, px + 3, Y + roofH - 2, 1, h - roofH - 1, "#d8d2c0"); }
+  if (s.chimney !== undefined) { rect(g, s.chimney, Y - 6, 8, 10, K); rect(g, s.chimney + 1, Y - 5, 6, 8, "#b0603f"); rect(g, s.chimney + 1, Y - 5, 6, 1, "#d08060"); }
+  rect(g, 0, Y + 3, w, roofH - 1, K); rect(g, 1, Y + 4, w - 2, roofH - 3, s.roof);
+  for (let r = 0, y = Y + 8; y < Y + roofH - 4; r++, y += 4) {
+    rect(g, 1, y, w - 2, 1, s.roofDark);
+    for (let i = (r % 2) * 4; i < w - 2; i += 8) rect(g, 1 + i, y - 3, 1, 3, s.roofDark);
+  }
+  rect(g, 4, Y, w - 8, 4, K); rect(g, 5, Y + 1, w - 10, 2, s.roofLight); rect(g, 1, Y + roofH - 4, w - 2, 2, s.roofDark);
+  if (s.plate) { const x = Math.round((w - s.plate) / 2); rect(g, x - 1, Y + 7, s.plate + 2, 12, K); rect(g, x, Y + 8, s.plate, 10, "#ffffff"); }
+  for (const wx of s.windows || []) {
+    const wy = Y + roofH + 5;
+    rect(g, wx - 1, wy - 1, 16, 12, K); rect(g, wx, wy, 14, 10, shut ? "#8a5a30" : lit ? "#ffd56a" : "#9fd0f2");
+    if (shut) { for (let i = 1; i < 10; i += 3) rect(g, wx, wy + i, 14, 1, "#6a4224"); }
+    else { rect(g, wx + 6, wy, 2, 10, K); rect(g, wx, wy + 4, 14, 1, K); if (!lit) rect(g, wx + 1, wy + 1, 3, 2, "#e4f4ff"); }
+    if (s.box) { rect(g, wx - 1, wy + 11, 16, 3, "#8a5a30"); rect(g, wx + 1, wy + 10, 2, 1, "#f06a6a"); rect(g, wx + 6, wy + 10, 2, 1, "#f4f4f4"); rect(g, wx + 11, wy + 10, 2, 1, "#f06a6a"); }
+  }
+  const d = s.door, dh = d.h ?? 18, dy = Y + h - dh;
+  rect(g, d.x - 1, dy - 1, d.w + 2, dh + 1, K);
+  if (d.kind === "wood") { rect(g, d.x, dy, d.w, dh, "#9a6236"); rect(g, d.x + 1, dy + 1, d.w - 2, 1, "#b47a46"); rect(g, d.x + d.w - 3, dy + 9, 2, 2, "#f2cf5a"); }
+  else if (d.kind === "double") { rect(g, d.x, dy, d.w, dh, "#8a5230"); rect(g, d.x + d.w / 2 - 1, dy, 2, dh, K); rect(g, d.x + 2, dy + 2, d.w / 2 - 4, 5, lit ? "#ffd56a" : "#9fd0f2"); rect(g, d.x + d.w / 2 + 2, dy + 2, d.w / 2 - 4, 5, lit ? "#ffd56a" : "#9fd0f2"); }
+  else if (d.kind === "glass") { rect(g, d.x, dy, d.w, dh, lit ? "#ffe39a" : "#8fcaf0"); rect(g, d.x + d.w / 2 - 1, dy, 2, dh, K); if (!lit) rect(g, d.x + 1, dy + 1, 3, 6, "#e4f4ff"); }
+  else if (d.kind === "forge") { rect(g, d.x, dy, d.w, dh, "#2a1a1a"); if (lit) { rect(g, d.x + 1, dy + 6, d.w - 2, dh - 6, "#e0602a"); rect(g, d.x + 3, dy + 10, d.w - 6, dh - 10, "#ffb040"); } }
+  return c;
+}
+function paintTower(lit) {
+  const w = 48, h = 80, c = canvasOf(w, h + M), g = c.getContext("2d"), Y = M, K = "#2a2a38";
+  const left = (y) => 20 - 15 * (y / 56), right = (y) => 26 + 15 * (y / 56);
+  for (let y = 0; y < 56; y++) { rect(g, Math.round(left(y)), Y + y, 2, 1, "#4d5670"); rect(g, Math.round(right(y)), Y + y, 2, 1, "#4d5670"); }
+  for (let y = 6; y < 54; y += 10) {
+    rect(g, Math.round(left(y)), Y + y, Math.round(right(y) - left(y)) + 2, 1, "#8a93a8");
+    for (let k = 0; k < 10; k++) { const yy = y + k; rect(g, Math.round(left(yy) + (right(yy) - left(yy)) * (k / 10)), Y + yy, 1, 1, "#a8b0c4"); }
+  }
+  rect(g, 16, Y - 2, 16, 3, K); rect(g, 23, Y - 8, 2, 7, K);
+  rect(g, 3, Y + 50, 42, 6, K); rect(g, 4, Y + 51, 40, 4, "#7a5cd0");
+  rect(g, 4, Y + 55, 40, 25, K); rect(g, 5, Y + 56, 38, 23, "#dfe2ec");
+  for (const wx of [7, 33]) { rect(g, wx - 1, Y + 61, 10, 9, K); rect(g, wx, Y + 62, 8, 7, lit ? "#ffd56a" : "#9fd0f2"); }
+  rect(g, 17, Y + 62, 14, 18, K); rect(g, 18, Y + 63, 12, 17, "#5a4a8a"); rect(g, 27, Y + 71, 2, 2, "#f2cf5a");
+  return c;
+}
+function lotArt() {
+  const c = canvasOf(64, 48 + M), g = c.getContext("2d"), Y = M;
+  rect(g, 2, Y + 6, 60, 40, "#c9a878");
+  for (let i = 0; i < 26; i++) { const n = noise(i, 3, 9); rect(g, 4 + n % 56, Y + 8 + (n >>> 8) % 36, 2, 1, "#b08e60"); }
+  for (const y of [Y + 6, Y + 44]) rect(g, 1, y, 62, 2, "#8a5a30");
+  for (let x = 1; x < 64; x += 10) rect(g, x, Y + 3, 2, 45, "#6a4224");
+  return c;
+}
+const LOT = lotArt();
+const builtArt = new Map();
+function buildingArt(b, lit, shut = false) {
+  const id = (b.id ?? "plot" + b.i) + lit + shut;
+  if (!builtArt.has(id)) builtArt.set(id, b.tower ? paintTower(lit) : paintBuilding(b.w * T, b.h * T, b.style, lit, shut));
+  return builtArt.get(id);
+}
+// The village follows this Mac's clock: evening light, then night with lit windows.
+function daylight() {
+  const h = new Date().getHours();
+  if (h >= 21 || h < 6) return { tint: "rgba(24, 32, 96, 0.34)", lit: true, night: true };
+  if (h >= 19 || h < 7) return { tint: "rgba(255, 140, 70, 0.13)", lit: true, night: false };
+  return { tint: null, lit: false, night: false };
+}
+
+/* ---------- Memory: houses, letters read, badges, the creatures seen ---------- */
+
+const memory = {
+  doc: { homes: {}, seen: {}, badges: {}, dex: {}, found: {}, reads: 0, sound: true, gb: false, player: null },
+  dirty: new Set(), timer: 0,
+  async load() {
+    if (!has("store")) return;
+    try { const doc = await S.store.get(""); if (doc && typeof doc === "object") Object.assign(this.doc, doc); }
+    catch (error) { problem(error); }
+  },
+  // Writes are whole values, gathered for a moment so walking does not write at each step.
+  touch(k) { this.dirty.add(k); clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(), 700); },
+  flush() {
+    const keys = [...this.dirty]; this.dirty.clear();
+    if (has("store")) keys.forEach((k) => S.store.set(k, this.doc[k]).catch(problem));
+  },
+};
+
+/* ---------- Sounds: a few square waves, like the old cartridges ---------- */
+
+const audio = { ctx: null };
+function wake() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!audio.ctx && AC) audio.ctx = new AC();
+  else if (audio.ctx && audio.ctx.state === "suspended") audio.ctx.resume();
+}
+function tone(freq, dur, { type = "square", vol = 0.03, at = 0, slide = 0 } = {}) {
+  if (!memory.doc.sound || !audio.ctx || audio.ctx.state !== "running") return;
+  const c = audio.ctx, t = c.currentTime + at, o = c.createOscillator(), g = c.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (slide) o.frequency.linearRampToValueAtTime(Math.max(30, freq + slide), t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + 0.02);
+}
+const melody = (notes, step = 0.12, opts = {}) => notes.forEach((f, i) => f && tone(f, step * 0.9, { ...opts, at: i * step }));
+const SFX = {
+  blip: () => tone(1046, 0.025, { vol: 0.01 }),
+  select: () => tone(1318, 0.05, { vol: 0.025 }),
+  bump: () => tone(98, 0.07, { type: "triangle", vol: 0.06 }),
+  alert: () => melody([880, 1175, 1568], 0.08),
+  letter: () => melody([1568, 2093], 0.09, { vol: 0.02 }),
+  heal: () => melody([523, 659, 784, 1046, 0, 784, 1046], 0.15, { type: "triangle", vol: 0.05 }),
+  fanfare: () => melody([523, 523, 523, 698, 0, 880, 784, 880, 1046], 0.11, { vol: 0.03 }),
+  build: () => [0, 0.25, 0.5].forEach((at) => tone(180, 0.05, { at, vol: 0.05 })),
+  encounter: () => melody([1568, 1397, 1175, 1046, 880, 784, 698, 587], 0.05),
+  splash: () => tone(600, 0.25, { type: "sawtooth", vol: 0.02, slide: -500 }),
+  win: () => melody([784, 988, 1175, 1568], 0.1),
+};
+
+/* ---------- Who lives here ---------- */
+
+let state = null, painted = false;
+const agentsE = new Map();           // agent id → villager
+const creaturesE = new Map();        // "<agent>:<item>" → creature following it
+const claims = new Map();            // "x,y" → agent id standing there or going there
+const occupied = new Map();          // "x,y" → whoever blocks the tile now
+const lastWord = new Map();
+const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+const OPPOSITE = { up: "down", down: "up", left: "right", right: "left" };
+const dirOf = (dx, dy) => dx > 0 ? "right" : dx < 0 ? "left" : dy > 0 ? "down" : "up";
+const newMover = (type, [x, y], dir, extra) => ({ type, x, y, px: x * T, py: y * T, dir, move: null, path: [], steps: 0, trail: [], ...extra });
+const player = newMover("player", SPAWN, "left", { look: PLAYER_LOOK, goal: null, turnAt: 0, run: false });
+const FIXED = [
+  newMover("papi", PAPI_SPOT, "right", { look: PAPI_LOOK, name: "Grandpa Octet", turnAt: 0 }),
+  newMover("nurse", NURSE_SPOT, "down", { look: NURSE_LOOK, name: "Nurse Jo" }),
+];
+const cat = newMover("cat", CAT_HOME, "down", { name: "Whiskers", follow: false, talks: 0, wanderAt: 0 });
+const PAPI = { name: "GRANDPA OCTET", color: "#8a6a48" }, NURSE = { name: "NURSE JO", color: "#f08cb0" };
+const SYSTEM = { name: "SOMETHING", color: "#7fa8dc" };
+const fixedAt = (x, y) => FIXED.some((f) => f.x === x && f.y === y);
+
+// The agent something's own window talks to (this village's builder) is listed as launched, with nothing it can do.
+const isAssistant = (a) => a.origin === "launched" && a.alive !== false && !["done", "error", "interrupted"].includes(a.state)
+  && !Object.values(a.can).some(Boolean);
+const agentById = (id) => state && state.agents.find((a) => a.id === id) || null;
+const threadOf = (a) => state && a.thread ? state.threads.find((t) => t.id === a.thread) || null : null;
+const nameOf = (a) => isAssistant(a) ? "your assistant" : line(a.name ?? label(a.kind), 30);
+function lastItem(a) {
+  const thread = threadOf(a), turn = thread && thread.turns[thread.turns.length - 1];
+  return turn && turn.items[turn.items.length - 1] || null;
+}
+// The sub-agents of the agent's latest turn: running ones hop, finished ones doze.
+function companions(a) {
+  const thread = threadOf(a), turn = thread && thread.turns[thread.turns.length - 1];
+  if (!turn) return [];
+  return turn.items.filter((i) => i.kind === "subagent").slice(-3).map((item) => ({ item,
+    status: item.tool && item.tool.status ? item.tool.status : turn.state === "working" ? "running" : turn.state === "done" ? "done" : null }));
+}
+// What a tool is about, by its name, whatever the harness calls it.
+function placeFor(item) {
+  if (!item) return "home";
+  if (item.kind === "thought") return "pier";
+  if (item.kind === "subagent") return "prairie";
+  if (item.kind !== "tool") return "home";
+  const n = (item.tool && item.tool.name || "").toLowerCase();
+  if (/task|agent/.test(n)) return "prairie";
+  if (/web|fetch|http|browser|url|mcp/.test(n)) return "tower";
+  if (/edit|write|patch|notebook|replace|create|update|todo|plan/.test(n)) return "home";
+  if (/read|grep|glob|search|find|list|^ls|view|open|cat/.test(n)) return "library";
+  return "forge";                                     // bash, shell, exec, and everything that runs
+}
+function wantedPlace(a) {
+  if (isAssistant(a)) return "lab";
+  const w = word(a.state);
+  if (w === "waiting") return "square";
+  if (w === "error") return "centre";
+  if (w !== "working") return "home";
+  if (companions(a).some((c) => c.status === "running")) return "prairie";
+  return placeFor(lastItem(a));
+}
+// A finished answer is a letter: the last agent message of the latest turn that is not running.
+function letterOf(a) {
+  if (!a || isAssistant(a)) return null;
+  const thread = threadOf(a);
+  if (!thread) return null;
+  for (let i = thread.turns.length - 1; i >= 0; i--) {
+    const turn = thread.turns[i];
+    if (turn.state === "working") continue;
+    const item = turn.items.slice().reverse().find((x) => x.kind === "message" && x.author === "agent");
+    if (item) return { agent: a, thread, item, turn };
+  }
+  return null;
+}
+const unread = (l) => !!l && memory.doc.seen[l.thread.id] !== l.item.id;
+const letters = () => state ? state.agents.map(letterOf).filter(Boolean).sort((a, b) => (b.item.at || "").localeCompare(a.item.at || "")) : [];
+
+// Houses: a folder keeps its plot in memory; new folders take a free plot, or the one quiet the longest.
+function settleHomes(agents, ts) {
+  const homes = memory.doc.homes, active = new Map();
+  agents.forEach((a) => { if (a.folder && !isAssistant(a)) active.set(a.folder, [active.get(a.folder) || "", a.updated || a.started || ""].sort()[1]); });
+  let changed = false;
+  PLOTS.forEach((p) => { p.folder = null; });
+  for (const [folder, h] of Object.entries(homes)) {
+    const p = PLOTS[h.plot];
+    if (p && !p.folder) { p.folder = folder; if (active.has(folder) && active.get(folder) > (h.seen || "")) { h.seen = active.get(folder); changed = true; } }
+    else { delete homes[folder]; changed = true; }
+  }
+  const built = [];
+  [...active].sort((a, b) => b[1].localeCompare(a[1])).forEach(([folder, at]) => {
+    if (homes[folder]) return;
+    let p = PLOTS.find((q) => !q.folder);
+    if (!p) {
+      p = PLOTS.filter((q) => !active.has(q.folder)).sort((a, b) => (homes[a.folder].seen || "").localeCompare(homes[b.folder].seen || ""))[0];
+      if (p) delete homes[p.folder];
+    }
+    if (!p) return;                                   // no plot left: its agents camp
+    p.folder = folder; p.build = ts; homes[folder] = { plot: p.i, seen: at }; changed = true; built.push(p);
+  });
+  if (changed) memory.touch("homes");
+  PLOTS.forEach((p) => { p.awake = !!p.folder && active.has(p.folder); });
+  return built;
+}
+const plotOf = (folder) => folder ? PLOTS.find((p) => p.folder === folder) || null : null;
+function slotsFor(e, place) {
+  if (place !== "home") return PLACES[place].slots;
+  const p = plotOf(e.folder);
+  return p ? p.spots : PLACES.camp.slots;
+}
+// Breadth-first search over the walkable tiles; the fixed villagers are in the way, the person only when asked.
+function findPath(sx, sy, tx, ty, avoidPlayer) {
+  if (sx === tx && sy === ty) return [];
+  const start = tk(sx, sy), goal = tk(tx, ty), prev = new Map([[start, null]]), queue = [[sx, sy]];
+  while (queue.length) {
+    const [x, y] = queue.shift(), k = tk(x, y);
+    if (k === goal) { const steps = []; for (let c = k; c !== start; c = prev.get(c)) steps.unshift(c.split(",").map(Number)); return steps; }
+    for (const [dx, dy] of Object.values(DIRS)) {
+      const nx = x + dx, ny = y + dy, nk = tk(nx, ny);
+      if (prev.has(nk) || !walkable(nx, ny) || fixedAt(nx, ny) || (avoidPlayer && nx === player.x && ny === player.y)) continue;
+      prev.set(nk, k); queue.push([nx, ny]);
+    }
+  }
+  return null;
+}
+function nearFree(x0, y0) {
+  const seen = new Set([tk(x0, y0)]), queue = [[x0, y0]];
+  while (queue.length) {
+    const [x, y] = queue.shift();
+    if (walkable(x, y) && !claims.has(tk(x, y)) && !KEEP_FREE.has(tk(x, y)) && !fixedAt(x, y)) return [x, y];
+    for (const [dx, dy] of Object.values(DIRS)) { const k = tk(x + dx, y + dy); if (!seen.has(k) && seen.size < 400) { seen.add(k); queue.push([x + dx, y + dy]); } }
+  }
+  return null;
+}
+function claim(e, place) {
+  if (e.slot) claims.delete(tk(e.slot[0], e.slot[1]));
+  const list = slotsFor(e, place);
+  let slot = list.find(([x, y]) => !claims.has(tk(x, y)) && !fixedAt(x, y));
+  if (!slot) { const n = nearFree(list[0][0], list[0][1]); slot = n ? [n[0], n[1], list[0][2]] : list[0]; }
+  claims.set(tk(slot[0], slot[1]), e.id);
+  e.slot = slot; e.place = place; e.goal = [slot[0], slot[1]];
+  e.path = findPath(e.x, e.y, slot[0], slot[1], false) || [];
+}
+function placeAt(e, x, y) { Object.assign(e, { x, y, px: x * T, py: y * T, move: null, path: [] }); }
+
+function sync(next) {
+  state = next;
+  const ts = performance.now(), agents = state.agents, ids = new Set(agents.map((a) => a.id));
+  const built = settleHomes(agents, ts);
+  // Villagers who left fade away.
+  for (const [id, e] of agentsE) if (!ids.has(id) && !e.leaving) { e.leaving = ts; if (e.slot) claims.delete(tk(e.slot[0], e.slot[1])); }
+  agents.forEach((a) => {
+    let e = agentsE.get(a.id);
+    const want = wantedPlace(a);
+    if (!e) {
+      // Newcomers walk in: from the Centre when something launched them, else up the road.
+      const from = !painted ? null : a.origin === "launched" ? [27, 20] : [21, 28];
+      e = newMover("agent", from || SPAWN, "down", { id: a.id, seed: hash(a.id) % 7, born: painted ? ts : 0, wanderAt: 0, wantAt: 0, placedAt: ts, last: null });
+      agentsE.set(a.id, e);
+      e.folder = a.folder; e.want = want;
+      claim(e, want);
+      if (!from) placeAt(e, e.slot[0], e.slot[1]);
+      else { burst(e.px + 8, e.py + 8, "#ffffff", 12); }
+    }
+    if (e.leaving) { e.leaving = 0; claim(e, want); }
+    if (want !== e.want) { e.want = want; e.wantAt = ts; }
+    if (e.folder !== a.folder) { e.folder = a.folder; e.place = null; }
+    // A house that moved or appeared: its people go there.
+    if (e.place === "home" && !slotsFor(e, "home").some(([x, y]) => e.slot && x === e.slot[0] && y === e.slot[1])) e.place = null;
+    Object.assign(e, { look: isAssistant(a) ? PROF_LOOK : agentLook(a), word: word(a.state), kind: a.kind, color: kindColor(a.kind), name: nameOf(a) });
+    // What it just said floats above its head for a few seconds.
+    const item = lastItem(a);
+    if (item && item.id !== e.last) {
+      if (painted && e.last !== null && item.kind === "message" && item.author === "agent") e.say = { text: line(item.text, 90), until: ts + 7000 };
+      e.last = item.id;
+    } else if (!item) e.last = "";
+  });
+  // Creatures follow their agent; new species go into the Companion Book.
+  const keep = new Set();
+  agents.forEach((a) => companions(a).forEach(({ item, status }, i) => {
+    const k = a.id + ":" + item.id, owner = agentsE.get(a.id);
+    let c = creaturesE.get(k);
+    if (!c) {
+      const seed = hash(a.id + item.id);
+      c = { type: "creature", key: k, owner: a.id, seed, name: creatureName(seed), color: CREATURE_COLORS[(seed >>> 1) % 6][0],
+            px: owner.px + (i - 1) * 10, py: owner.py + 6, roamAt: 0, rx: 0, ry: 0 };
+      creaturesE.set(k, c);
+      if (painted) burst(c.px + 8, c.py + 8, c.color, 8);
+      dexAdd(c.name, "creature", c.seed);
+    }
+    Object.assign(c, { index: i, status, text: item.text });
+    keep.add(k);
+  }));
+  for (const k of [...creaturesE.keys()]) if (!keep.has(k)) creaturesE.delete(k);
+  // Tell the person what changed, once the village is on screen.
+  agents.forEach((a) => {
+    const w = word(a.state), was = lastWord.get(a.id), who = isAssistant(a) ? "Your assistant" : line(a.name ?? label(a.kind), 30);
+    if (painted && was === undefined) toast(`${label(a.kind)} arrives in the village: ${who}`);
+    else if (painted && w === "waiting" && was !== "waiting") { toast(`${who} is waiting for you on the Square!`, "wait"); SFX.alert(); }
+    else if (painted && w === "error" && was !== "error") toast(`${who} went to the Centre: an error`, "wait");
+    else if (painted && was === "working" && w !== "working" && unread(letterOf(a))) { toast(`✉ ${who} wrote you a letter`); SFX.letter(); }
+    lastWord.set(a.id, w);
+  });
+  for (const id of [...lastWord.keys()]) if (!ids.has(id)) lastWord.delete(id);
+  built.forEach((p) => { toast(`A house is being built for ${base(p.folder)}`); SFX.build(); });
+  if (built.length) earn("batisseur");
+  if (!painted) { const n = letters().filter(unread).length; if (n) setTimeout(() => toast(`✉ ${n > 1 ? n + " letters are waiting for you" : "A letter is waiting for you"} at the mailbox`), 600); }
+  painted = true;
+  hud();
+}
+
+function counts() {
+  const c = {}; (state ? state.agents : []).forEach((a) => { const w = word(a.state); c[w] = (c[w] || 0) + 1; });
+  return c;
+}
+function summaryParts() {
+  const c = counts(), parts = [], plural = (n, one, many) => n > 1 ? many : one;
+  if (c.working) parts.push(`${c.working} working`);
+  if (c.idle) parts.push(`${c.idle} ${plural(c.idle, "free", "free")}`);
+  if (c.error) parts.push(`${c.error} in error`);
+  if ((c.done || 0) + (c.interrupted || 0)) parts.push(`${(c.done || 0) + (c.interrupted || 0)} resting`);
+  if (c.unknown) parts.push(`${c.unknown} ${plural(c.unknown, "unknown", "unknown")}`);
+  return { waiting: c.waiting || 0, parts };
+}
+function hud() {
+  const el = $("stats"); el.replaceChildren();
+  if (!state) el.textContent = "…";
+  else if (!state.agents.length) el.textContent = mayAny("state") ? "Nobody in the village" : "Your agents are invisible";
+  else {
+    const { waiting, parts } = summaryParts();
+    if (waiting) el.append(make("span", "alert", `${waiting} ${waiting > 1 ? "are waiting for you" : "is waiting for you"}`), parts.length ? " · " : "");
+    el.append(parts.join(" · "));
+  }
+  const n = letters().filter(unread).length;
+  $("mailBtn").hidden = !n; $("mailBtn").textContent = `✉ ${n} ${n > 1 ? "LETTERS" : "LETTER"}`;
+}
+function toast(text, cls = "") {
+  const box = $("toasts"), t = make("div", "box toast " + cls, text);
+  box.append(t);
+  while (box.children.length > 3) box.firstChild.remove();
+  setTimeout(() => t.remove(), 4800);
+}
+
+/* ---------- Badges and the Companion Book ---------- */
+
+const BADGES = [
+  { id: "plume", name: "Quill Badge", hint: "Send a message to an agent.", color: "#5aa2ee" },
+  { id: "centre", name: "Centre Badge", hint: "Call an agent over.", color: "#e2463c" },
+  { id: "batisseur", name: "Builder Badge", hint: "Watch a house being built.", color: "#c8903f" },
+  { id: "facteur", name: "Postman Badge", hint: "Read 5 letters from your agents.", color: "#f4cf3a" },
+  { id: "pecheur", name: "Angler Badge", hint: "Catch something at the pier.", color: "#3fb0b8" },
+  { id: "insecte", name: "Bug Badge", hint: "Fix a wild bug in the tall grass.", color: "#6cc060" },
+  { id: "fouineur", name: "Snoop Badge", hint: "Find what shines in the village.", color: "#f190bf" },
+  { id: "retro", name: "Retro Badge", hint: "An old secret code… ↑ ↑ ↓ ↓", color: "#8a5cd0" },
+];
+function earn(id) {
+  if (memory.doc.badges[id]) return;
+  const b = BADGES.find((x) => x.id === id);
+  memory.doc.badges[id] = new Date().toISOString(); memory.touch("badges");
+  setTimeout(() => { SFX.fanfare(); toast(`You earned the ${b.name.toUpperCase()}!`, "badge"); }, 300);
+}
+function badgeIcon(color, got) {
+  const c = canvasOf(12, 10), g = c.getContext("2d");
+  const rows = ["...kkkkkk...", "..kccccllk..", ".kccccccllk.", "kccccccccclk", "kccccccccclk", "kcccccccccck", ".kccccccccck", "..kccccccck.", "...kkkkkkk..", "............"];
+  rows.forEach((r, y) => { for (let x = 0; x < 12; x++) { const ch = r[x]; if (ch === "." || !ch) continue; g.fillStyle = ch === "k" ? "#2a2a38" : !got ? "#c8ccd8" : ch === "l" ? "#ffffff" : color; g.fillRect(x, y, 1, 1); } });
+  return c;
+}
+function dexAdd(name, kind, seed = 0) {
+  const d = memory.doc.dex[name] || { n: 0, first: new Date().toISOString(), kind, seed };
+  d.n++; memory.doc.dex[name] = d; memory.touch("dex");
+}
+
+/* ---------- What each one says ---------- */
+
+const speakerOf = (a) => ({ name: isAssistant(a) ? "YOUR ASSISTANT" : `${label(a.kind).toUpperCase()} · ${line(a.name ?? "unknown", 40)}`, color: kindColor(a.kind) });
+function doing(item) {
+  const t = line(item.text, 120), tool = item.tool ? item.tool.name : "a tool";
+  if (item.kind === "thought") return "I'm thinking at the Pier… The sound of the water helps me.";
+  if (item.kind === "subagent") return `I released a companion into the tall grass: "${t}"`;
+  if (item.kind === "tool") {
+    const where = placeFor(item);
+    if (where === "forge") return `I'm at the Forge, running ${tool}${t ? ": " + t : ""}.`;
+    if (where === "library") return `I'm reading at the Library: ${tool}${t ? " " + t : ""}.`;
+    if (where === "tower") return `I'm picking up signals at the Tower: ${tool}${t ? " " + t : ""}.`;
+    if (where === "prairie") return `I'm sending a companion: ${tool}${t ? " " + t : ""}.`;
+    return `I'm at my desk, writing: ${tool}${t ? " " + t : ""}.`;
+  }
+  if (item.author === "person") return `I'm reading your message: "${t}"`;
+  return `I just said: "${t}"`;
+}
+function story(a) {
+  if (isAssistant(a)) {
+    const lines = document.scripts[document.scripts.length - 1].textContent.split("\n").length;
+    return ["Ah, there you are! It's me, your assistant: I built this village.",
+      `This village's script is ${lines} lines long. I'm rather proud of it.`,
+      "To talk to me, write in the bar at the bottom of the something window."];
+  }
+  const w = word(a.state), thread = threadOf(a), items = thread ? thread.turns.flatMap((t) => t.items) : [];
+  const last = items[items.length - 1], letter = letterOf(a);
+  const request = state.requests.find((r) => r.agent === a.id), where = a.folder ? ` in ${tilde(a.folder)}` : "";
+  const answer = letter ? (unread(letter) ? "I have a letter for you! ✉" : `My last answer: "${line(letter.item.text, 150)}"`) : null;
+  const pages = [];
+  if (w === "waiting") {
+    if (request) pages.push(request.kind === "permission"
+      ? `Hey, you! I need your permission for ${request.tool ?? "a tool"}${request.about ? ": " + line(request.about, 90) : ""}.`
+      : `Hey, you! I have a question${request.about ? ": '" + line(request.about, 110) + "'" : ""}.`);
+    else pages.push(a.waiting === "permission" ? "Hey, you! I'm waiting for your permission to go on."
+      : a.waiting === "answer" ? "Hey, you! I'm waiting for your answer to go on." : "Hey, you! I'm waiting for you.");
+    // A permission or a question is answered in something's window (or where the agent runs), never here.
+    pages.push(a.origin === "launched" ? "Answer me in the something window: I'm queuing here while I wait."
+      : `Answer me where I run${a.folder ? " (" + tilde(a.folder) + ")" : ""}: from here, I can't hear you.`);
+  } else if (w === "working") { pages.push(`I'm hard at work${where}!`); if (last) pages.push(doing(last)); }
+  else if (w === "idle") { pages.push(`I'm free${where}. Do you have a mission for me?`); if (answer) pages.push(answer); }
+  else if (w === "done") { pages.push(`I'm finished${where}. I'm taking a little nap.`); if (answer) pages.push(answer); }
+  else if (w === "error") { pages.push("Oops… something went wrong. I came to the Centre."); if (a.error) pages.push(line(a.error.message, 220)); }
+  else if (w === "interrupted") { pages.push("Someone stopped me in mid-stride."); if (answer) pages.push(answer); }
+  else pages.push("…", NAMES[a.kind] ? "(Nobody knows what it is doing right now: something cannot tell.)"
+    : "(something only sees its process: impossible to know what it is doing.)");
+  if (a.error && w !== "error") pages.push(`(Its last error: ${line(a.error.message, 180)})`);
+  const helping = companions(a).filter((c) => c.status === "running").length;
+  if (helping) pages.push(helping > 1 ? `My ${helping} little companions are helping me right now.` : "My little companion is helping me right now.");
+  if (a.queue.length) pages.push(`I have ${a.queue.length > 1 ? a.queue.length + " messages" : "a message"} on hold for after this turn: "${line(a.queue[0].text, 100)}"`);
+  if (!a.can.send) {
+    if (a.origin === "elsewhere") pages.push(a.can.resume && has("launch", a.kind)
+      ? "I'm running somewhere else, in a terminal: I can tell you about it, but not listen. Unless you have me continue here."
+      : "I'm running elsewhere: I can tell you about it, but not listen.");
+    else if (a.because.send) pages.push(`(${a.because.send})`);
+  } else if (!has("send", a.kind)) pages.push(`(You have not allowed this village to write to ${label(a.kind)}. You can change it in the space's Info.)`);
+  return pages;
+}
+const tunable = (a) => has("send", a.kind) && ["model", "mode", "effort"].some((k) => a.can[k] && a.options[k] && a.options[k].length);
+function choicesFor(a) {
+  const w = word(a.state), may = has("send", a.kind), thread = threadOf(a), letter = letterOf(a), out = [];
+  if (letter) out.push({ key: "letter", label: unread(letter) ? "READ THE LETTER ✉" : "READ THE LETTER AGAIN" });
+  if (a.can.send && may) out.push({ key: "talk", label: "TALK" });
+  if (thread && thread.turns.some((t) => t.items.length)) out.push({ key: "journal", label: "JOURNAL" });
+  if (a.queue.length) out.push({ key: "queue", label: `ON HOLD (${a.queue.length})` });
+  if (tunable(a)) out.push({ key: "tune", label: "SETTINGS" });
+  if (a.can.interrupt && may && (w === "working" || w === "waiting")) out.push({ key: "stop", label: "INTERRUPT" });
+  if (a.can.resume && a.thread && has("launch", a.kind)) out.push({ key: "resume", label: "CONTINUE HERE" });
+  out.push({ key: null, label: "HI!" });
+  return out;
+}
+const TURN_WORD = { working: "running", done: "done", error: "in error", interrupted: "interrupted", unknown: "unknown state" };
+function journalRows(a) {
+  const thread = threadOf(a), me = line(a.name ?? label(a.kind), 30).toUpperCase(), rows = [];
+  if (!thread) return rows;
+  const skipped = thread.complete ? 0 : "?";
+  thread.turns.forEach((turn, n) => {
+    rows.push({ cls: "sep", who: `TURN ${skipped ? "…" : ""}${n + 1} · ${TURN_WORD[turn.state] || "unknown state"}`, at: turn.started, what: "" });
+    turn.items.forEach((i) => rows.push({ at: i.at, what: (i.text || "…") + (i.truncated ? " […]" : ""),
+      who: i.author === "person" ? "YOU" : i.kind === "tool" ? `› ${(i.tool ? i.tool.name : "tool").toUpperCase()}${i.tool && i.tool.status === "failed" ? " · FAILED" : i.tool && i.tool.status === "running" ? " · RUNNING" : ""}`
+        : i.kind === "thought" ? "THOUGHT" : i.kind === "subagent" ? "COMPANION" : me }));
+  });
+  return rows.slice(-80);
+}
+
+async function talkAgent(id) {
+  let a = agentById(id);
+  if (!a) return;
+  const sp = speakerOf(a), pages = story(a);
+  for (const page of pages.slice(0, -1)) await say(sp, page);
+  if (choicesFor(a).length === 1) return say(sp, pages[pages.length - 1]);
+  await say(sp, pages[pages.length - 1], true);
+  for (;;) {
+    const pick = await choose(choicesFor(a));
+    if (!pick) return;
+    a = agentById(id);
+    if (!a) return say(SYSTEM, "This agent is no longer in the village.");
+    if (pick === "talk") return message(a, sp);
+    if (pick === "stop") return interrupt(a, sp);
+    if (pick === "resume") return resume(a, sp);
+    if (pick === "letter" && await readLetter(letterOf(a)) === "reply") return message(a, sp);
+    if (pick === "journal") {
+      const thread = threadOf(a);
+      await panel({ title: `JOURNAL · ${line(a.name ?? label(a.kind), 40)}`, rows: journalRows(a),
+        foot: thread && !thread.complete ? "Only its last 10 turns are kept." : "" });
+    }
+    if (pick === "queue") await panel({ title: `ON HOLD · ${line(a.name ?? label(a.kind), 40)}`,
+      rows: a.queue.map((q) => ({ who: "YOU", at: q.at, what: q.text })), foot: "They leave at the end of its turn. INTERRUPT clears them all." });
+    if (pick === "tune") await adjust(a, sp);
+    a = agentById(id);
+    if (!a) return;
+    await say(sp, "Anything else?", true);
+  }
+}
+async function message(a, sp) {
+  const w = word(a.state), buttons = [{ key: "next", label: "SEND" }];
+  if (a.can.steer && (w === "working" || w === "waiting")) buttons.push({ key: "now", label: "RIGHT NOW" });
+  // "next" waits for the running turn to end (on a waiting agent: until the person answered in something's window);
+  // "now" steers into the running turn.
+  const hint = w === "waiting" ? "I'll read it after your answer in the something window."
+    : w === "working" ? (buttons.length > 1 ? "SEND: at the end of my turn · RIGHT NOW: while I work." : "I'll read it at the end of my turn.") : "";
+  const r = await input(sp, `What do you want to tell me?${hint ? "\n" + hint : ""}`, buttons, "Write your message…");
+  if (!r || !r.text.trim()) return;
+  try {
+    const { delivery } = await S.send(a.id, r.text.trim(), { when: r.key });
+    earn("plume");
+    await say(sp, delivery === "started" ? "Got it! I'm on it right away."
+      : delivery === "queued" ? (w === "waiting" ? "Noted! I'll read it once you've answered me in the something window."
+        : "Noted! I'll get to it as soon as I finish what I'm doing.")
+      : "Received, I'm adding it to what I'm doing.");
+  } catch (error) { await say(SYSTEM, error.message); }
+}
+async function interrupt(a, sp) {
+  await say(sp, "Do you really want to interrupt me?", true);
+  if (await choose([{ key: "yes", label: "YES" }, { key: null, label: "NO" }]) !== "yes") return say(sp, "Phew! I'm carrying on.");
+  try {
+    const { interrupted } = await S.interrupt(a.id);
+    await say(sp, interrupted ? "All right, I'm stopping here." : "I wasn't doing anything, actually.");
+    if (a.queue.length) await say(SYSTEM, "Its messages on hold were cleared.");
+  } catch (error) { await say(SYSTEM, error.message); }
+}
+async function resume(a, sp) {
+  try { await S.resume(a.kind, a.thread); await say(sp, "I'm back! I'm continuing here: you can talk to me now."); }
+  catch (error) { await say(SYSTEM, error.message); }
+}
+// Model, mode and effort: values from the agent's own options; a mode that asks less opens a window of the Mac.
+async function adjust(a, sp) {
+  const knobs = [["model", "MODEL", "my model"], ["mode", "MODE", "my mode"], ["effort", "EFFORT", "my effort"]]
+    .filter(([k]) => a.can[k] && a.options[k] && a.options[k].length);
+  const current = (k) => { const o = a.options[k].find((x) => x.value === a[k]); return o ? o.label : a[k] ?? "unknown"; };
+  await say(sp, "What do you want to change about me?", true);
+  const k = await choose([...knobs.map(([key, name]) => ({ key, label: `${name} · ${current(key)}` })), { key: null, label: "BACK" }]);
+  if (!k) return;
+  const what = knobs.find((x) => x[0] === k)[2];
+  await say(sp, `Choose ${what}:`, true);
+  const v = await choose([...a.options[k].map((o) => ({ key: o.value, label: (o.value === a[k] ? "✓ " : "") + o.label })), { key: null, label: "BACK" }]);
+  if (v === null) return;
+  try {
+    const { applied } = await S.set(a.id, { [k]: v });
+    await say(sp, applied === "now" ? "Done: I'm switching right away." : "Noted: it will be applied on my next turn.");
+  } catch (error) { await say(SYSTEM, error.message); }
+}
+async function readLetter(l) {
+  if (!l) return null;
+  const a = l.agent, first = unread(l), seen = memory.doc.seen;
+  seen[l.thread.id] = l.item.id;
+  if (Object.keys(seen).length > 200) { const live = new Set(state.threads.map((t) => t.id)); for (const id of Object.keys(seen)) if (!live.has(id)) delete seen[id]; }
+  memory.touch("seen");
+  if (first) { memory.doc.reads = (memory.doc.reads || 0) + 1; memory.touch("reads"); if (memory.doc.reads >= 5) earn("facteur"); }
+  hud();
+  const actions = [...(a.can.send && has("send", a.kind) ? [{ key: "reply", label: "REPLY" }] : []), { key: null, label: "CLOSE" }];
+  return panel({ title: `LETTER FROM ${line(a.name ?? label(a.kind), 40).toUpperCase()}`, cls: "letter", actions,
+    meta: `${label(a.kind)} · ${tilde(a.folder)} · ${dayOf(l.item.at)}`,
+    text: l.item.text + (l.item.truncated ? "\n\n[… the rest was too long to fit in the envelope]" : "") });
+}
+async function courrier() {
+  const list = letters();
+  const id = await panel({ title: "MAILBOX", pick: true, empty: "No letters yet. When an agent finishes a job, it writes to you.",
+    rows: list.map((l) => ({ key: l.agent.id, newMark: unread(l), who: `${nameOf(l.agent).toUpperCase()} · ${label(l.agent.kind)}`, at: l.item.at, what: line(l.item.text, 140) })),
+    foot: "A letter is the last answer of an agent once it has finished." });
+  if (!id) return;
+  const l = list.find((x) => x.agent.id === id);
+  if (await readLetter(l) === "reply") { const a = agentById(id); if (a) await message(a, speakerOf(a)); }
+}
+async function talkCreature(c) {
+  const owner = agentById(c.owner), cry = c.name.slice(0, 2);
+  const sp = { name: `${c.name.toUpperCase()} · companion of ${owner ? nameOf(owner) : "?"}`, color: c.color };
+  await say(sp, `${c.name} ! ${cry}${cry.toLowerCase()} !`);
+  await say(sp, `(It's a sub-agent. Its mission: "${line(c.text, 180) || "unknown"}")`);
+  await say(sp, c.status === "running" ? "It's still busy for its owner." : c.status === "failed" ? "It's down: its mission failed."
+    : c.status === "done" ? "Mission accomplished! It is resting." : "No idea how far along it is.");
+}
+const HELP = [
+  "Arrow keys or WASD to walk, Shift to run. Space or Enter to talk and confirm. Esc for the menu, or to go back.",
+  "With the mouse: click the ground to go there, a villager to talk to them, the small map to go there.",
+  "Each villager is one of your agents. It lives in its folder's house and goes out to work: the Forge for commands, the Library to read, the Waves Tower for the Web, the Pier to think.",
+  "Those waiting for you line up on the Request Square. Those in error go to the Centre. The little creatures following them are their sub-agents.",
+  "When an agent finishes, it writes you a letter: the flag on its mailbox goes up. Read them at the MAILBOX, in the menu.",
+  "At the Centre, or in front of a house, you can call a new agent, even in a new folder: a house is built for it.",
+  "And they say the village hides a few secrets…",
+];
+const STORIES = [
+  "In 1947, a real moth was found stuck in a computer. The first 'bug' in history!",
+  "A mathematician wrote programs for a machine that did not exist yet, a century early. Quite a head start.",
+  "Back in my day, programs were stored on punched cards. Beware whoever dropped the stack!",
+  "Here we have one rule: no deploys on Friday. Not even for the Flopfish.",
+  "If you explain your code to a rubber duck, you often find the bug. We sometimes fish them out at the pier!",
+  "They say one of the village trees is not quite a tree… Pff, old wives' tales.",
+  "The tall grass is full of wild bugs. Bring console.log with you.",
+  "They say an old secret code changes the colors of the world. Up, up, down, down…",
+];
+async function talkPapi() {
+  await say(PAPI, "Welcome to Prompt Town! Here, every villager is one of your agents.");
+  if (!state || (!state.agents.length && !mayAny("state")))
+    await say(PAPI, "Hmm… I don't see any of your agents. Allow \"see your agents\" in the space's Info, and they will come and live here.");
+  else if (!state.agents.length) await say(PAPI, "It's quiet today: nobody in the village. Call an agent over at the Centre, or launch one in a terminal.");
+  else {
+    const { parts } = summaryParts(), n = state.agents.length, waiting = state.agents.filter((a) => word(a.state) === "waiting");
+    await say(PAPI, `${n} ${n > 1 ? "villagers" : "villager"} right now${parts.length ? ": " + parts.join(", ") : ""}.`);
+    if (waiting.length) await say(PAPI, `${waiting.slice(0, 3).map(nameOf).join(", ")}${waiting.length > 3 ? "…" : ""} ${waiting.length > 1 ? "are waiting" : "is waiting"} for you on the Request Square, to the southeast.`);
+    const mail = letters().filter(unread).length;
+    if (mail) await say(PAPI, `And the postman says ${mail > 1 ? mail + " letters are" : "one letter is"} waiting for you.`);
+  }
+  await say(PAPI, anyOf(STORIES));
+  await say(PAPI, "Want me to explain how the village works?", true);
+  if (await choose([{ key: "yes", label: "YES" }, { key: null, label: "NO" }]) !== "yes") return say(PAPI, "Then enjoy your walk!");
+  for (const page of HELP) await say(PAPI, page);
+}
+
+/* ---------- Calling agents, building houses ---------- */
+
+const LAUNCHABLE = ["claude", "codex", "opencode", "pi"];
+const launchable = () => LAUNCHABLE.filter((k) => has("launch", k) && !S.granted.unavailable.includes("launch:" + k)
+  && state && state.kinds[k] && state.kinds[k].launch && state.kinds[k].installed !== false);
+const inside = (folder, root) => !root || folder === root || folder.startsWith(root.replace(/\/+$/, "") + "/");
+// A folder written by the person: inside the granted folder, "~/…", or a full path; ".." is resolved, never trusted.
+function resolveFolder(text, root) {
+  let t = text.trim().replace(/\/+$/, "");
+  if (!t) return null;
+  const home = (root || "").match(/^\/Users\/[^/]+/);
+  if (t.startsWith("~")) { if (!home) return null; t = home[0] + t.slice(1); }
+  else if (!t.startsWith("/")) { if (!root) return null; t = root.replace(/\/+$/, "") + "/" + t; }
+  const parts = [];
+  for (const s of t.split("/")) { if (!s || s === ".") continue; if (s === "..") parts.pop(); else parts.push(s); }
+  return "/" + parts.join("/");
+}
+async function invite(sp, { folder = null, plot = null } = {}) {
+  if (!mayAny("launch")) return say(sp, "Nobody can come: you have not allowed this village to launch agents. You can change it in the space's Info.");
+  const kinds = launchable();
+  if (!kinds.length) return say(sp, "Sadly, nobody can come: none of the agents this village is allowed to launch is installed on this Mac.");
+  const root = S.granted.folder;
+  await say(sp, "Which agent do you want to call over?", true);
+  const kind = await choose([...kinds.map((k) => ({ key: k, label: label(k).toUpperCase() })), { key: null, label: "BACK" }]);
+  if (!kind) return;
+  if (!folder) {
+    const known = [...new Set([root, ...PLOTS.map((p) => p.folder)].filter((f) => f && inside(f, root)))];
+    const options = plot ? [] : known.map((f) => ({ key: f, label: f === root ? `${base(f)} (whole folder)` : base(f) }));
+    await say(sp, plot ? `In which folder will its house be?${root ? " It must be inside " + tilde(root) + "." : ""}`
+      : `In which folder will it work?${root ? " (You allowed " + tilde(root) + ".)" : ""}`, true);
+    const pickFolder = await choose([...options, { key: "other", label: plot ? "WRITE THE FOLDER…" : "ANOTHER FOLDER…" }, { key: null, label: "BACK" }]);
+    if (!pickFolder) return;
+    if (pickFolder === "other") {
+      const r = await input(sp, `Which folder?${root ? " Type a path inside " + tilde(root) + ", for example 'my-project'." : " Type its full path."}`,
+        [{ key: "ok", label: "VALIDATE" }], root ? "my-project" : "/Users/example/my-project");
+      if (!r) return;
+      folder = resolveFolder(r.text, root);
+      if (!folder) return say(sp, "I could not make sense of that path.");
+    } else folder = pickFolder;
+  }
+  if (root && !inside(folder, root)) return say(sp, `${tilde(folder)} is outside ${tilde(root)}, the only folder this village can launch agents in.`);
+  const r = await input(sp, `What first mission for ${label(kind)} in ${tilde(folder)}? You can leave it empty.`, [{ key: "go", label: "BRING THEM" }],
+    "For example: read the README and summarize the project…");
+  if (!r) return;
+  let id;
+  try { const out = await S.launch(kind, { folder }); id = typeof out === "string" ? out : out && out.id; }
+  catch (error) { return say(SYSTEM, error.message + (error.code === "LAUNCH_FAILED" ? " (Does the folder exist?)" : "")); }
+  earn("centre");
+  const fresh = !plotOf(folder);
+  if (plot && !plot.folder && fresh) { memory.doc.homes[folder] = { plot: plot.i, seen: new Date().toISOString() }; plot.folder = folder; plot.build = performance.now(); memory.touch("homes"); SFX.build(); earn("batisseur"); }
+  const mission = r.text.trim();
+  if (mission && id) { try { await S.send(id, mission, { when: "next" }); earn("plume"); } catch (error) { await say(SYSTEM, error.message); } }
+  await say(sp, `There you go! ${label(kind)} arrives in the village${mission ? " with its mission" : ""}. ${fresh ? "A new house is going up for its folder!" : "It joins its folder's house."}`);
+}
+async function talkCentre() {
+  await say(NURSE, "Welcome to the agents' Centre! What can I do for you?", true);
+  const pick = await choose([{ key: "call", label: "CALL AN AGENT" }, { key: "heal", label: "HEAL MY AGENTS" }, { key: null, label: "GOODBYE" }]);
+  if (pick === "call") return invite(NURSE);
+  if (pick !== "heal") return say(NURSE, "See you soon!");
+  await say(NURSE, "I'm taking care of your agents. One moment…", true);
+  SFX.heal(); await wait(1500);
+  const sick = state ? state.agents.filter((a) => word(a.state) === "error").length : 0;
+  await say(NURSE, "There you go! Your agents are in top shape.");
+  if (sick) await say(NURSE, `(Well… ${sick > 1 ? sick + " of them are" : "one of them is"} in error. For that, you'll need to go talk to them in front of the Centre.)`);
+  await say(NURSE, "We hope to see you again soon!");
+}
+async function talkPlot(p) {
+  if (!p.folder) {
+    await say(null, "A building plot. It is waiting for a folder.");
+    if (!mayAny("launch")) return say(null, "(To have a house built here, allow this village to launch agents.)");
+    await say(null, "Would you like to found a house here, with an agent to live in it?", true);
+    if (await choose([{ key: "yes", label: "YES" }, { key: null, label: "NO" }]) !== "yes") return;
+    return invite(null, { plot: p });
+  }
+  const living = state ? state.agents.filter((a) => a.folder === p.folder && !isAssistant(a)) : [];
+  const may = mayAny("launch") && inside(p.folder, S.granted.folder);
+  const rows = living.map((a) => ({ key: a.id, mark: MARK[word(a.state)], newMark: unread(letterOf(a)), who: `${label(a.kind).toUpperCase()} · ${SAYS[word(a.state)]}`, what: line(a.name ?? "unknown", 80) }));
+  if (may) rows.push({ key: "invite", who: "NEW", what: "+ Invite an agent to this house" });
+  const id = await panel({ title: `HOUSE OF ${tilde(p.folder)}`, pick: true, rows,
+    empty: "Nobody home right now. The house remembers its folder.",
+    foot: p.awake ? "Pick a villager to talk to." : "Shutters are closed: no agent from this folder is here." });
+  if (!id) return;
+  if (id === "invite") return invite(null, { folder: p.folder });
+  await goTalk(id);
+}
+async function goTalk(id) {
+  const e = agentsE.get(id);
+  if (e && !e.leaving && nextTo(e)) { e.dir = OPPOSITE[player.dir]; talkingTo = e; flash(); }
+  await talkAgent(id);
+}
+
+/* ---------- Secrets ---------- */
+
+const CATCHES = [
+  { p: 0.05, name: "GOLDEN OCTET", text: "A GOLDEN OCTET! It shines with its 8 bits. Very rare!" },
+  { p: 0.35, name: "FLOPFISH", text: "A FLOPFISH! It bounces about… and that's all. You let it go." },
+  { p: 0.15, name: "OLD BOOT", text: "An old boot. Someone committed it by mistake." },
+  { p: 0.15, name: "STACK TRACE", text: "A soggy stack trace. It points to line 42." },
+  { p: 0.12, name: "RUBBER DUCK", text: "A rubber duck! You explain your code to it… and find the bug. Thanks, duck." },
+];
+async function fish() {
+  await say(null, "You cast your line…", true);
+  await wait(900 + Math.random() * 1500);
+  let r = Math.random();
+  const got = CATCHES.find((c) => (r -= c.p) < 0);
+  if (!got) return say(null, "… Nothing bites. The fish are in a meeting.");
+  SFX.splash(); burst(player.px + 8 + DIRS[player.dir][0] * 16, player.py + 8 + DIRS[player.dir][1] * 16, "#d8eefb", 10);
+  await say(null, "Oh! Something bites!");
+  await say(null, got.text);
+  dexAdd(got.name, "fish"); earn("pecheur");
+}
+const BUG_NAMES = ["BUG", "HEISENBUG", "OFF-BY-ONE", "NULL POINTER", "MEMORY LEAK", "RACE CONDITION", "TYPO"];
+const BUG_MOVES = ["uses SEGFAULT! … Nothing happens: you have no pointers.", "uses IT WORKS ON MY MACHINE! Your confidence drops.",
+  "hides in a 3000-line file!", "uses FLAKY! It vanishes… then comes back.", "uses TIMEOUT! … … It was just waiting."];
+function bugSprite(seed) {
+  const c = canvasOf(16, 16), g = c.getContext("2d");
+  let s = seed || 1;
+  const rnd = () => (s = (Math.imul(s, 1103515245) + 12345) >>> 0) / 4294967296;
+  const cols = ["#7a3cc8", "#2a2a38", "#4fae4a", "#c03a8a"];
+  for (let y = 2; y < 15; y++) for (let x = 0; x < 6; x++) if (rnd() < 0.62 - Math.abs(y - 8) * 0.045) { g.fillStyle = cols[Math.floor(rnd() * 4)]; g.fillRect(2 + x, y, 1, 1); g.fillRect(13 - x, y, 1, 1); }
+  rect(g, 5, 6, 2, 2, "#ffffff"); rect(g, 9, 6, 2, 2, "#ffffff"); rect(g, 6, 7, 1, 1, "#e2463c"); rect(g, 9, 7, 1, 1, "#e2463c");
+  return c;
+}
+function drawBattle(b) {
+  const g = $("battleArt").getContext("2d");
+  g.imageSmoothingEnabled = false;
+  const sky = g.createLinearGradient(0, 0, 0, 112); sky.addColorStop(0, "#f8f4e0"); sky.addColorStop(1, "#cfe8b4");
+  g.fillStyle = sky; g.fillRect(0, 0, 240, 112);
+  const oval = (x, y, rx, ry, col) => { g.fillStyle = col; g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); g.fill(); };
+  oval(178, 52, 42, 9, "#8cbc64"); oval(178, 50, 38, 7, "#a8d080"); oval(62, 104, 50, 10, "#8cbc64"); oval(62, 102, 46, 8, "#a8d080");
+  if (!b.won) g.drawImage(b.sprite, 154, 4, 48, 48);
+  g.drawImage(personSprite(PLAYER_LOOK, "up", 0), 38, 58, 48, 48);
+  const card = (x, y, name, lv, hp, max) => {
+    g.fillStyle = "#2c3452"; g.fillRect(x, y, 104, 28); g.fillStyle = "#fbfaf4"; g.fillRect(x + 2, y + 2, 100, 24);
+    g.fillStyle = "#262a3a"; g.font = "bold 8px ui-monospace, Menlo, monospace"; g.textBaseline = "top";
+    g.fillText(name.slice(0, 14), x + 6, y + 5); g.fillText(lv, x + 74, y + 5);
+    g.fillText("HP", x + 6, y + 16); g.fillStyle = "#2c3452"; g.fillRect(x + 20, y + 16, 76, 6);
+    const k = Math.max(0, hp / max); g.fillStyle = k > 0.5 ? "#4fb35a" : k > 0.2 ? "#e0b040" : "#e2463c"; g.fillRect(x + 21, y + 17, Math.round(74 * k), 4);
+  };
+  card(8, 8, b.name, "N.404", Math.max(0, b.hp), 3);
+  card(128, 70, "YOU", "N.99", 99, 99);
+}
+async function encounter() {
+  const flashes = $("flash");
+  flashes.classList.add("dark");
+  for (let i = 0; i < 3; i++) { flash(); await wait(160); }
+  flashes.classList.remove("dark");
+  SFX.encounter();
+  const b = { name: anyOf(BUG_NAMES), hp: 3, sprite: bugSprite(Math.floor(Math.random() * 1e9)), won: false };
+  const box = $("battle"); box.hidden = false; drawBattle(b);
+  const hit = (n) => { b.hp -= n; box.classList.remove("hit"); void box.offsetWidth; box.classList.add("hit"); SFX.bump(); drawBattle(b); };
+  try {
+    await say(null, `A wild ${b.name} appeared!`);
+    for (;;) {
+      await say(null, "What will you do?", true);
+      const moves = [{ key: "log", label: "CONSOLE.LOG" }, { key: "tests", label: "RUN TESTS" }, { key: "blame", label: "GIT BLAME" }];
+      if (memory.doc.dex["RUBBER DUCK"]) moves.push({ key: "duck", label: "DUCK" });
+      moves.push({ key: "ball", label: "CAPTURE" }, { key: null, label: "RUN" });
+      const m = await choose(moves);
+      if (!m) return say(null, `You run away… The ${b.name} stays in production.`);
+      if (m === "log") { await say(null, `You scatter console.log everywhere. The ${b.name} spots you!`); hit(1); }
+      if (m === "tests") {
+        if (Math.random() < 0.6) { await say(null, "You run the tests… a test fails! Super effective!"); hit(2); }
+        else await say(null, `All the tests pass… The ${b.name} hides somewhere else. Not very effective.`);
+      }
+      if (m === "blame") await say(null, "You run git blame… it was you. Not very effective.");
+      if (m === "duck") { await say(null, "You explain the problem to the rubber duck… Everything becomes clear! Critical hit!"); hit(3); }
+      if (m === "ball") {
+        if (b.hp <= 1) { SFX.win(); await say(null, `You throw a capture ball… Caught! The ${b.name} is captured. You store it in a ticket.`); dexAdd(b.name, "bug"); earn("insecte"); return; }
+        await say(null, `You throw a capture ball… The ${b.name} gets out of it! It's still too full of energy.`);
+      }
+      if (b.hp <= 0) { b.won = true; drawBattle(b); SFX.win(); await say(null, `The ${b.name} is fixed! It becomes… a feature.`); dexAdd(b.name, "bug"); earn("insecte"); return; }
+      await say(null, `The ${b.name} ${anyOf(BUG_MOVES)}`);
+    }
+  } finally { box.hidden = true; }
+}
+async function talkTree(x, y) {
+  if (x !== SIMULARBRE[0] || y !== SIMULARBRE[1]) return say(null, anyOf(["A nice tree. It says nothing, it grows.", "A tree. Its leaves rustle in binary.", "A tree, firmly rooted. Nothing to report."]));
+  memory.doc.found.tree = (memory.doc.found.tree || 0) + 1; memory.touch("found");
+  if (memory.doc.found.tree === 1) return say(null, "A tree… It looks a bit odd.");
+  if (memory.doc.found.tree === 2) return say(null, "Did the tree move? No… Yes?");
+  lay(x, y, 1, 1, GRASS); maps.clear(); memory.doc.found.simularbre = true; memory.touch("found");
+  burst(x * T + 8, y * T + 8, "#44a14e", 16); SFX.encounter();
+  await say(null, "It's a FAKE TREE! It was pretending to be a tree! It runs away!");
+  dexAdd("FAKE TREE", "tree");
+}
+async function talkCat() {
+  cat.talks++;
+  cat.dir = OPPOSITE[player.dir];
+  if (cat.follow) { cat.follow = false; return say(null, "Whiskers stretches out in the sun. It no longer follows you."); }
+  if (cat.talks < 3) return say(null, anyOf(["Meow.", "Mrrrow?", "Whiskers looks at you. It slowly blinks."]));
+  cat.follow = true;
+  await say(null, "Meow! Whiskers has decided to follow you.");
+}
+async function talkProp(p) {
+  if (p.type === "oak") return say(null, anyOf(["The big tree of the village. It was here before the first commit.", "Its roots run under both avenues. The agents meet there."]));
+  if (p.type === "fountain") return say(null, anyOf(["You toss a coin in the fountain and make a wish: that all the tests pass.", "The water is clear. You see your reflection… you look like someone who delegates well."]));
+  if (p.type === "board") return board();
+  if (p.type === "anvil") return say(null, "An anvil. It has seen thousands of npm installs.");
+  if (p.type === "bench") return say(null, "You sit down for a moment. The village runs fine without you: good sign.");
+  if (p.type === "tent") return say(null, "A tent. Agents whose folder has no house camp in it while they wait.");
+  if (p.type === "fire") return say(null, "A campfire. It smells of marshmallows and cold coffee.");
+  if (p.type === "candy") {
+    PROPS.delete(tk(p.x, p.y)); lay(p.x, p.y, 1, 1, FLOWER); maps.clear(); memory.doc.found.candy = true; memory.touch("found");
+    SFX.win(); await say(null, "You find a SUPER CANDY! Your agents gain… zero levels. But it's sweet.");
+    earn("fouineur");
+  }
+}
+async function board() {
+  const waiting = state ? state.agents.filter((a) => word(a.state) === "waiting") : [];
+  const id = await panel({ title: "REQUEST BOARD", pick: true, empty: "Nobody is waiting for you. The board is empty, like your to-do list (almost).",
+    rows: waiting.map((a) => {
+      const r = state.requests.find((q) => q.agent === a.id);
+      return { key: a.id, mark: MARK.waiting, who: `${nameOf(a).toUpperCase()} · ${label(a.kind)}`, at: r ? r.at : a.updated,
+        what: r ? (r.kind === "permission" ? `Permission for ${r.tool ?? "a tool"}${r.about ? ": " + line(r.about, 90) : ""}` : `Question${r.about ? ": " + line(r.about, 90) : ""}`)
+          : a.waiting === "permission" ? "Waits for a permission, where it runs" : "Waits for your answer" };
+    }),
+    foot: "Requests are answered in the something window, or where the agent runs." });
+  if (id) await goTalk(id);
+}
+async function talkBuilding(b) {
+  const here = [...agentsE.values()].filter((e) => !e.leaving && e.place === b.place && !e.path.length).map((e) => e.name);
+  const who = here.length ? `Right now: ${here.slice(0, 4).join(", ")}${here.length > 4 ? "…" : ""}.` : "Nobody right now.";
+  if (b.id === "centre") return talkCentre();
+  if (b.id === "library") return say(null, `LIBRARY — Files are read here. Quiet: we grep. ${who}`);
+  if (b.id === "forge") return say(null, `FORGE — Commands run here. Careful, it gets hot. ${who}`);
+  if (b.id === "tower") return say(null, `WAVES TOWER — The Web and distant tools come through here. ${who}`);
+  if (b.id === "lab") return say(null, "PROFESSOR'S LAB — On the door: 'Do not disturb, I'm coding this village.'");
+}
+async function startMenu() {
+  const mail = letters().filter(unread).length, got = BADGES.filter((b) => memory.doc.badges[b.id]).length;
+  const pick = await choose([{ key: "agents", label: "AGENTS" }, { key: "mail", label: `MAIL${mail ? " ✉" + mail : ""}` },
+    { key: "badges", label: `BADGES ${got}/8` }, { key: "dex", label: "COMPANIONS" }, { key: "sound", label: `SOUND: ${memory.doc.sound ? "ON" : "OFF"}` },
+    { key: "help", label: "HELP" }, { key: null, label: "CLOSE" }], true);
+  if (pick === "help") { for (const page of HELP) await say(PAPI, page); return; }
+  if (pick === "mail") return courrier();
+  if (pick === "sound") { memory.doc.sound = !memory.doc.sound; memory.touch("sound"); SFX.select(); return say(null, memory.doc.sound ? "The sound is back. ♪" : "Shh. The village goes quiet."); }
+  if (pick === "badges") return panel({ title: `BADGES · ${got}/8`, foot: got === 8 ? "All badges! You are a Master of Agents." : "Each badge is earned by playing… or by working.",
+    rows: BADGES.map((b) => { const at = memory.doc.badges[b.id]; return { cls: at ? "" : "locked", icon: () => badgeIcon(b.color, !!at), who: at ? b.name.toUpperCase() : "???", at: at || null, what: b.hint }; }) });
+  if (pick === "dex") {
+    const entries = Object.entries(memory.doc.dex).sort((a, b) => a[1].first.localeCompare(b[1].first));
+    return panel({ title: `COMPANIONS · ${entries.length}`, empty: "No encounters yet. Your agents' sub-agents sign up here on their own.",
+      rows: entries.map(([name, d]) => ({ icon: () => d.kind === "creature" ? creatureSprite(d.seed, false) : d.kind === "bug" ? bugSprite(hash(name)) : d.kind === "tree" ? TREE_ART : BALL,
+        who: `${name.toUpperCase()} · ${d.kind === "creature" ? "sub-agent" : d.kind === "bug" ? "bug caught" : d.kind === "tree" ? "rare creature" : "caught at the pier"}`,
+        what: `Seen ${d.n} times · first ${dayOf(d.first)}` })) });
+  }
+  if (pick !== "agents") return;
+  const rank = (a) => ["waiting", "error", "working", "idle", "interrupted", "unknown", "done"].indexOf(word(a.state));
+  const id = await panel({ title: "VILLAGE AGENTS", pick: true, empty: "Nobody in the village for now.",
+    foot: state ? Object.values(state.kinds).map((k) => k.note).filter(Boolean).join(" ") : "",
+    rows: (state ? state.agents.slice() : []).sort((a, b) => rank(a) - rank(b) || (b.updated || "").localeCompare(a.updated || "")).map((a) => {
+      const e = agentsE.get(a.id), w = word(a.state);
+      return { key: a.id, mark: MARK[w], newMark: unread(letterOf(a)), who: `${isAssistant(a) ? "YOUR ASSISTANT" : label(a.kind).toUpperCase()} · ${SAYS[w]}`,
+        what: `${line(a.name ?? "unknown", 60)} — ${e && e.place ? PLACES[e.place].at : tilde(a.folder)}` };
+    }) });
+  if (id) await goTalk(id);
+}
+
+/* ---------- Dialog boxes, choices, the message box, panels ---------- */
+
+const UI = { mode: null, typer: null, resolve: null, options: [], rows: [], acts: [], index: 0, act: 0, submit: null, fallback: null };
+let busy = false, talkingTo = null;
+function showTalk(sp) {
+  $("talk").hidden = false; $("hint").hidden = true; $("more").hidden = true; $("form").hidden = true;
+  const tag = $("tag"); tag.hidden = !sp; tag.replaceChildren();
+  if (sp) { const dot = make("i"); dot.style.background = sp.color; tag.append(dot, sp.name); }
+}
+// A page of text, typed out. With keep, it resolves once typed and stays on screen under the choices that follow.
+function say(sp, text, keep = false) {
+  return new Promise((resolve) => {
+    showTalk(sp); $("text").textContent = "";
+    UI.mode = "say"; UI.typer = { chars: Array.from(text), n: 0, keep, resolve };
+  });
+}
+function typed() {
+  const t = UI.typer; t.n = t.chars.length; $("text").textContent = t.chars.join("");
+  if (t.keep) { UI.typer = null; UI.mode = null; t.resolve(); } else $("more").hidden = false;
+}
+function advance() {
+  const t = UI.typer;
+  if (!t) return;
+  if (t.n < t.chars.length) return typed();
+  UI.typer = null; UI.mode = null; $("more").hidden = true; SFX.select(); t.resolve();
+}
+function typeTick(dt) {
+  const t = UI.typer;
+  if (!t || t.n >= t.chars.length) return;
+  const before = Math.floor(t.n);
+  t.n += dt * 75;
+  if (Math.floor(t.n / 3) > Math.floor(before / 3)) SFX.blip();
+  if (t.n >= t.chars.length) typed(); else $("text").textContent = t.chars.slice(0, Math.floor(t.n)).join("");
+}
+const pickNow = (k) => { if (UI.resolve) UI.resolve(k); };
+function choose(options, start = false) {
+  return new Promise((resolve) => {
+    const box = $("choices"); box.classList.toggle("start", start); box.replaceChildren(); box.hidden = false;
+    UI.mode = "choose"; UI.options = options;
+    UI.resolve = (k) => { box.hidden = true; UI.mode = null; UI.resolve = null; SFX.select(); resolve(k); };
+    options.forEach((o, i) => {
+      const b = make("button", "", o.label); b.type = "button"; b.tabIndex = -1;
+      b.onmouseenter = () => mark(i); b.onclick = () => pickNow(o.key);
+      box.append(b);
+    });
+    mark(0);
+  });
+}
+function mark(i) {
+  UI.index = (i + UI.options.length) % UI.options.length;
+  [...$("choices").children].forEach((b, j) => { b.classList.toggle("on", j === UI.index); if (j === UI.index) b.scrollIntoView({ block: "nearest" }); });
+}
+// The message box lives in the dialog and is never redrawn by a change, so the text survives while the person types.
+function input(sp, prompt, buttons, placeholder) {
+  return new Promise((resolve) => {
+    showTalk(sp); $("text").textContent = prompt; $("form").hidden = false;
+    const area = $("input"); area.value = ""; area.placeholder = placeholder;
+    const done = (value) => { $("form").hidden = true; UI.mode = null; UI.resolve = null; UI.submit = null; area.blur(); resolve(value); };
+    UI.mode = "input"; UI.resolve = done; UI.submit = (k) => done({ key: k, text: area.value }); UI.fallback = buttons[0].key;
+    $("btns").replaceChildren(...buttons.map((b, i) => {
+      const el = make("button", "key" + (i ? " alt" : ""), b.label); el.type = "button"; el.tabIndex = -1;
+      el.onmousedown = (event) => event.preventDefault(); el.onclick = () => UI.submit && UI.submit(b.key);
+      return el;
+    }));
+    setTimeout(() => area.focus(), 0);
+  });
+}
+// A panel holds a list (to read, or to pick from), or a text to read, with buttons under it.
+function panel({ title, rows = null, text = null, meta = "", foot = "", actions = [], pick = false, cls = "", empty = "Nothing to show." }) {
+  return new Promise((resolve) => {
+    const box = $("panel"), list = $("plist"), body = $("pbody");
+    box.className = "box panel " + cls + (pick ? " pick" : ""); box.hidden = false;
+    $("ptitle").textContent = title;
+    $("pmeta").textContent = meta; $("pmeta").hidden = !meta;
+    $("pfoot").textContent = foot; $("pfoot").hidden = !foot;
+    list.hidden = !rows; body.hidden = text === null; body.textContent = text ?? ""; body.scrollTop = 0;
+    list.replaceChildren(...(rows || []).map((r, i) => {
+      const li = make("li", r.cls || ""), who = make("div", "who");
+      if (r.icon) { const ic = r.icon(), img = canvasOf(ic.width, ic.height); img.getContext("2d").drawImage(ic, 0, 0); img.className = "ico"; li.append(img); }
+      if (r.mark) { const g = make("span", "g", r.mark[0]); g.style.color = r.mark[1]; who.append(g); }
+      if (r.newMark) who.append(make("span", "new", "✉"));
+      who.append(make("span", "", r.who));
+      if (r.at) who.append(make("time", "", hhmm(r.at)));
+      li.append(who);
+      if (r.what) li.append(make("div", "what", r.what));
+      if (pick) { li.onmouseenter = () => markRow(i); li.onclick = () => pickNow(r.key); }
+      return li;
+    }));
+    if (rows && !rows.length) list.append(make("li", "quiet", empty));
+    $("pacts").replaceChildren(...actions.map((a, i) => {
+      const el = make("button", "key" + (a.key ? "" : " alt"), a.label); el.type = "button"; el.tabIndex = -1;
+      el.onmouseenter = () => markAct(i); el.onclick = () => pickNow(a.key);
+      return el;
+    }));
+    $("pacts").hidden = !actions.length; $("pclose").hidden = !!actions.length;
+    UI.mode = "panel"; UI.rows = pick && rows ? rows : []; UI.acts = actions; UI.index = 0; UI.act = 0;
+    UI.resolve = (k) => { box.hidden = true; UI.mode = null; UI.resolve = null; SFX.select(); resolve(k ?? null); };
+    if (UI.rows.length) markRow(0); else if (rows) list.scrollTop = list.scrollHeight;
+    if (actions.length) markAct(0);
+  });
+}
+function markRow(i) {
+  UI.index = (i + UI.rows.length) % UI.rows.length;
+  [...$("plist").children].forEach((li, j) => { li.classList.toggle("on", j === UI.index); if (j === UI.index) li.scrollIntoView({ block: "nearest" }); });
+}
+function markAct(i) { UI.act = (i + UI.acts.length) % UI.acts.length; [...$("pacts").children].forEach((b, j) => b.classList.toggle("on", j === UI.act)); }
+function closeAll() {
+  ["talk", "choices", "panel", "form", "battle"].forEach((id) => { $(id).hidden = true; });
+  Object.assign(UI, { mode: null, typer: null, resolve: null, submit: null });
+  $("hint").hidden = false; talkingTo = null;
+}
+// One conversation at a time; whatever goes wrong is said in a box, then the village is free again.
+async function converse(script, who = null) {
+  if (busy) return;
+  busy = true; talkingTo = who; held.length = 0; player.path = []; player.goal = null;
+  try { await script(); }
+  catch (error) { try { await say(SYSTEM, error && error.message ? error.message : String(error)); } catch (_) { /* nothing more to say */ } }
+  finally { closeAll(); busy = false; }
+}
+function flash() { const f = $("flash"); f.classList.remove("go"); void f.offsetWidth; f.classList.add("go"); }
+
+/* ---------- Walking ---------- */
+
+function rebuildOccupied() {
+  occupied.clear();
+  for (const e of agentsE.values()) if (!e.leaving) occupied.set(tk(e.x, e.y), e);
+  FIXED.forEach((f) => occupied.set(tk(f.x, f.y), f));
+}
+const free = (x, y) => walkable(x, y) && !occupied.has(tk(x, y));
+const near = (m, x, y) => Math.round(m.px / T) === x && Math.round(m.py / T) === y;
+function thingAt(x, y) {
+  const e = occupied.get(tk(x, y));
+  if (e) return e;
+  for (const c of creaturesE.values()) if (near(c, x, y)) return c;
+  if (near(cat, x, y)) return cat;
+  const t = tileAt(x, y);
+  if (t === SIGN) { const p = PLOTS.find((q) => q.sign[0] === x && q.sign[1] === y); return p ? { type: "plot", plot: p } : { type: "sign", text: SIGNS.get(tk(x, y)) }; }
+  if (t === WALL) {
+    const inRect = (r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+    const p = PLOTS.find(inRect); if (p) return { type: "plot", plot: p };
+    const b = BUILDINGS.find(inRect); if (b) return { type: "building", building: b };
+  }
+  if (t === PROP) return { type: "prop", prop: PROPS.get(tk(x, y)) };
+  if (t === WATER) return { type: "water" };
+  if (t === TREE && x > 0 && y > 0 && x < W - 1 && y < H - 1) return { type: "tree", x, y };
+  return null;
+}
+function interact(thing) {
+  if (!thing) return;
+  if (thing.dir !== undefined && thing.type !== "player") thing.dir = OPPOSITE[player.dir];
+  if (thing.type === "agent") return converse(() => talkAgent(thing.id), thing);
+  if (thing.type === "creature") return converse(() => talkCreature(thing));
+  if (thing.type === "papi") return converse(talkPapi, thing);
+  if (thing.type === "nurse") return converse(talkCentre, thing);
+  if (thing.type === "cat") return converse(talkCat, cat);
+  if (thing.type === "plot") return converse(() => talkPlot(thing.plot));
+  if (thing.type === "building") return converse(() => talkBuilding(thing.building), thing.building.id === "centre" ? FIXED[1] : null);
+  if (thing.type === "sign") return converse(async () => { await say(null, thing.text[0]); await say(null, thing.text[1]); });
+  if (thing.type === "prop") return converse(() => talkProp(thing.prop));
+  if (thing.type === "water") return converse(fish);
+  if (thing.type === "tree") return converse(() => talkTree(thing.x, thing.y));
+}
+function startMove(m, dir) {
+  const [dx, dy] = DIRS[dir];
+  m.dir = dir;
+  if (!free(m.x + dx, m.y + dy)) return false;
+  m.trail.unshift([m.x, m.y]); m.trail.length = Math.min(m.trail.length, 4);
+  m.move = { fx: m.x, fy: m.y, t: 0 }; m.x += dx; m.y += dy; m.steps++;
+  return true;
+}
+function glide(m) {
+  const mv = m.move, t = mv ? Math.min(1, mv.t) : 1;
+  m.px = ((mv ? mv.fx : m.x) + (m.x - (mv ? mv.fx : m.x)) * t) * T;
+  m.py = ((mv ? mv.fy : m.y) + (m.y - (mv ? mv.fy : m.y)) * t) * T;
+}
+// Breadth-first search for the person: to a tile, or beside a thing, facing it.
+function route(goals) {
+  const want = new Map(goals.filter(([x, y]) => free(x, y) || (x === player.x && y === player.y)).map(([x, y, d]) => [tk(x, y), d]));
+  if (!want.size) return null;
+  const start = tk(player.x, player.y), prev = new Map([[start, null]]), queue = [[player.x, player.y]];
+  while (queue.length) {
+    const [x, y] = queue.shift(), k = tk(x, y);
+    if (want.has(k)) { const steps = []; for (let c = k; c !== start; c = prev.get(c)) steps.unshift(c.split(",").map(Number)); return { steps, dir: want.get(k) }; }
+    for (const [dx, dy] of Object.values(DIRS)) {
+      const nk = tk(x + dx, y + dy);
+      if (!prev.has(nk) && free(x + dx, y + dy)) { prev.set(nk, k); queue.push([x + dx, y + dy]); }
+    }
+  }
+  return null;
+}
+function goTo(x, y) {
+  const thing = thingAt(x, y);
+  const r = thing && thing.type === "plot" ? route([[...thing.plot.front, "up"], [thing.plot.sign[0], thing.plot.sign[1] + 1, "up"]])
+    : thing && thing.type === "building" ? route([[x, thing.building.y + thing.building.h, "up"], [thing.building.x + 2, thing.building.y + thing.building.h, "up"]])
+    : thing ? route([[x, y + 1, "up"], [x - 1, y, "right"], [x + 1, y, "left"], [x, y - 1, "down"]])
+    : route([[x, y, null]]) || route([[x, y + 1, null], [x, y - 1, null], [x - 1, y, null], [x + 1, y, null]]);
+  if (!r) return SFX.bump();
+  player.path = r.steps; player.goal = thing ? r.dir : null;
+}
+function nextTo(e) {
+  const spot = [[e.x, e.y + 1, "up"], [e.x - 1, e.y, "right"], [e.x + 1, e.y, "left"], [e.x, e.y - 1, "down"]].find(([x, y]) => free(x, y));
+  if (!spot) return false;
+  placeAt(player, spot[0], spot[1]); player.dir = spot[2]; player.goal = null;
+  return true;
+}
+const held = [];
+const heldDir = () => held[held.length - 1] || null;
+let grassSteps = 0;
+function stepPlayer(dt, ts) {
+  const speed = player.run ? 11 : 6.5;
+  if (player.move && (player.move.t += dt * speed) >= 1) {
+    player.move = null;
+    memory.doc.player = { x: player.x, y: player.y, dir: player.dir }; memory.touch("player");
+    // The tall grass is full of wild bugs.
+    if (tileAt(player.x, player.y) === TALL && !busy && ++grassSteps > 6 && Math.random() < 0.09) { grassSteps = 0; held.length = 0; player.path = []; converse(encounter); }
+  }
+  if (!player.move && !busy && !UI.mode) {
+    if (player.path.length) {
+      const [nx, ny] = player.path[0];
+      if (startMove(player, dirOf(nx - player.x, ny - player.y))) player.path.shift();
+      else { player.path = []; player.goal = null; }
+    } else if (player.goal) {
+      player.dir = player.goal; player.goal = null;
+      const [dx, dy] = DIRS[player.dir];
+      interact(thingAt(player.x + dx, player.y + dy));
+    } else if (heldDir() && ts >= player.turnAt && !startMove(player, heldDir()) && ts - (player.bumpAt || 0) > 350) { player.bumpAt = ts; SFX.bump(); }
+  }
+  glide(player);
+}
+const URGENT = new Set(["square", "centre", "lab"]);
+function stepAgent(e, dt, ts) {
+  if (e.leaving) return;
+  if ((e.place !== e.want || e.place === null) && e !== talkingTo && !e.move
+      && (e.place === null || URGENT.has(e.want) || (ts - e.wantAt > 1200 && ts - e.placedAt > 3000))) { claim(e, e.want); e.placedAt = ts; }
+  if (e.move && (e.move.t += dt * 3.4) >= 1) e.move = null;
+  if (!e.move && e !== talkingTo) {
+    if (e.path.length) {
+      const [nx, ny] = e.path[0];
+      // The person is in the way: wait a moment, then go round.
+      if ((nx === player.x && ny === player.y) || fixedAt(nx, ny)) {
+        e.stuck = (e.stuck || 0) + dt;
+        if (e.stuck > 0.8) { e.stuck = 0; e.path = findPath(e.x, e.y, e.goal[0], e.goal[1], true) || []; }
+      } else {
+        e.stuck = 0; e.trail.unshift([e.x, e.y]); e.trail.length = Math.min(e.trail.length, 4);
+        e.dir = dirOf(nx - e.x, ny - e.y); e.move = { fx: e.x, fy: e.y, t: 0 }; e.x = nx; e.y = ny; e.steps++; e.path.shift();
+      }
+    } else {
+      const atSlot = e.slot && e.x === e.slot[0] && e.y === e.slot[1];
+      const dx = player.x - e.x, dy = player.y - e.y, close = Math.abs(dx) + Math.abs(dy) <= 4;
+      if (e.word === "waiting" && close) e.dir = Math.abs(dx) > Math.abs(dy) ? dirOf(dx, 0) : dirOf(0, dy);
+      else if (atSlot && e.word !== "idle") e.dir = e.word === "done" || e.word === "unknown" ? "down" : e.slot[2];
+      if (e.place === "home" && e.word === "idle" && ts > e.wanderAt) {
+        // Free agents stroll around their house.
+        e.wanderAt = ts + 3000 + Math.random() * 5000;
+        const [sx, sy] = e.slot, options = [[sx, sy], [sx, sy]];
+        for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) {
+          const x = sx + i, y = sy + j;
+          if (walkable(x, y) && !claims.has(tk(x, y)) && !KEEP_FREE.has(tk(x, y)) && !occupied.has(tk(x, y))) options.push([x, y]);
+        }
+        const [gx, gy] = anyOf(options);
+        e.goal = [gx, gy]; e.path = findPath(e.x, e.y, gx, gy, true) || [];
+        if (!e.path.length) e.dir = anyOf(["down", "left", "right", "down"]);
+      } else if (!atSlot && e.place !== "home" && e.slot && ts > e.wanderAt) {
+        e.wanderAt = ts + 1500; e.goal = [e.slot[0], e.slot[1]]; e.path = findPath(e.x, e.y, e.slot[0], e.slot[1], true) || [];
+      }
+    }
+  }
+  glide(e);
+}
+const BESIDE = [[12, 4], [-12, 4], [0, 10]];
+function stepCreatures(dt, ts) {
+  for (const c of creaturesE.values()) {
+    const o = agentsE.get(c.owner);
+    if (!o) continue;
+    const resting = !o.path.length && !o.move;
+    let tx, ty;
+    if (resting && o.place === "prairie" && c.status === "running") {
+      // In the tall grass, they run around.
+      if (ts > c.roamAt) { c.roamAt = ts + 900 + Math.random() * 1600; c.rx = (Math.random() * 4 - 2) * T; c.ry = (Math.random() * 3 - 1) * T; }
+      tx = o.px + c.rx; ty = o.py + c.ry;
+    } else if (!resting && o.trail[c.index]) { tx = o.trail[c.index][0] * T; ty = o.trail[c.index][1] * T; }
+    else { const [ox, oy] = BESIDE[c.index] || BESIDE[2]; tx = o.px + ox; ty = o.py + oy; }
+    const k = Math.min(1, dt * 5);
+    c.px += (tx - c.px) * k; c.py += (ty - c.py) * k;
+  }
+}
+function stepCat(dt, ts) {
+  if (cat.move && (cat.move.t += dt * (cat.follow ? 7 : 2.5)) >= 1) cat.move = null;
+  if (!cat.move && cat !== talkingTo) {
+    const goal = cat.follow ? player.trail[1] || player.trail[0] : null;
+    if (goal && (cat.x !== goal[0] || cat.y !== goal[1])) {
+      const path = findPath(cat.x, cat.y, goal[0], goal[1], true);
+      if (path && path.length) { const [nx, ny] = path[0]; cat.dir = dirOf(nx - cat.x, ny - cat.y); cat.move = { fx: cat.x, fy: cat.y, t: 0 }; cat.x = nx; cat.y = ny; }
+    } else if (!cat.follow && ts > cat.wanderAt) {
+      cat.wanderAt = ts + 1800 + Math.random() * 4000;
+      const [dx, dy] = anyOf(Object.values(DIRS)), nx = cat.x + dx, ny = cat.y + dy;
+      if (walkable(nx, ny) && Math.abs(nx - CAT_HOME[0]) + Math.abs(ny - CAT_HOME[1]) < 6 && !occupied.has(tk(nx, ny)) && !(nx === player.x && ny === player.y)) {
+        cat.dir = dirOf(dx, dy); cat.move = { fx: cat.x, fy: cat.y, t: 0 }; cat.x = nx; cat.y = ny;
+      }
+    }
+  }
+  glide(cat);
+}
+function stepFixed(ts) {
+  const papi = FIXED[0];
+  if (papi !== talkingTo && ts > papi.turnAt) { papi.dir = anyOf(["down", "left", "right", "up", "down"]); papi.turnAt = ts + 2500 + Math.random() * 4000; }
+}
+
+/* ---------- Little lives: smoke, sparks, fireflies ---------- */
+
+const motes = [];
+function burst(x, y, color, n = 8, { speed = 40, life = 0.7, grav = 60, size = 1 } = {}) {
+  for (let i = 0; i < n && motes.length < 500; i++) {
+    const a = Math.random() * Math.PI * 2, v = speed * (0.4 + Math.random() * 0.6);
+    motes.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - speed * 0.3, life, max: life, color, grav, size });
+  }
+}
+function puff(x, y, color, { vy = -10, spread = 6, life = 2, size = 2 } = {}) {
+  if (motes.length < 500) motes.push({ x, y, vx: (Math.random() - 0.5) * spread, vy: vy * (0.7 + Math.random() * 0.6), life, max: life, color, grav: 0, size });
+}
+const busyPlaces = new Set();
+const BUILD_MS = 3200;
+let emitAt = 0;
+function stepMotes(dt, ts) {
+  for (let i = motes.length - 1; i >= 0; i--) {
+    const m = motes[i]; m.life -= dt;
+    if (m.life <= 0) { motes.splice(i, 1); continue; }
+    m.x += m.vx * dt; m.y += m.vy * dt; m.vy += m.grav * dt;
+  }
+  busyPlaces.clear();
+  for (const e of agentsE.values()) if (!e.leaving && !e.path.length && !e.move && e.word === "working") busyPlaces.add(e.place === "home" ? "home:" + e.folder : e.place);
+  if (ts < emitAt) return;
+  emitAt = ts + 220;
+  const forge = BUILDINGS[1];
+  if (busyPlaces.has("forge")) {
+    puff(forge.x * T + 66, forge.y * T - 6, "rgba(120,120,130,.8)", { size: 3 });
+    if (Math.random() < 0.5) burst(36 * T + 7, 5 * T + 6, anyOf(["#ffb040", "#ffe080", "#e0602a"]), 3, { speed: 50, life: 0.45, grav: 120 });
+  }
+  PLOTS.forEach((p) => {
+    if (p.folder && busyPlaces.has("home:" + p.folder)) puff(p.x * T + 50, p.y * T - 6, "rgba(200,200,210,.75)", { size: 2 });
+    if (p.build && ts - p.build < BUILD_MS) puff(p.x * T + 8 + Math.random() * 48, p.y * T + 40, "rgba(180,150,110,.8)", { vy: -6, spread: 14, life: 0.9, size: 2 });
+  });
+  if (Math.random() < 0.4) puff(FIRE.x * T + 8, FIRE.y * T + 4, "#ffb040", { vy: -18, spread: 8, life: 0.6, size: 1 });
+}
+const FIREFLIES = Array.from({ length: 18 }, (_, i) => ({ x: (noise(i, 1, 5) % 20 + 2) * T, y: (noise(i, 2, 5) % 9 + 19) * T, s: noise(i, 3, 5) % 100 }));
+const BUTTERFLIES = [[38, 10, "#f4f4f4"], [41, 26, "#f6c84a"], [8, 13, "#f190bf"], [30, 1, "#a6d4f7"]];
+
+/* ---------- Drawing ---------- */
+
+const cv = $("world"), ctx = cv.getContext("2d");
+let scale = 2, dpr = 1, cw = 0, ch = 0, forest = null, hover = null;
+const SAFE = 104, TOP = 70;                          // the assistant's band at the bottom, the title boxes at the top
+function resize() {
+  dpr = window.devicePixelRatio || 1; cw = innerWidth; ch = innerHeight;
+  cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+  // The largest zoom on whole screen pixels (crisp art) that still shows a good part of the village around you.
+  const zooms = [];
+  for (let d = Math.ceil(1.5 * dpr); d <= 4 * dpr; d++) zooms.push(d / dpr);
+  const fit = zooms.filter((z) => cw / z >= 26 * T && (ch - SAFE - TOP) / z >= 15 * T);
+  scale = fit.length ? fit[fit.length - 1] : zooms[0];
+  forest = ctx.createPattern(FOREST, "repeat");
+  draw(performance.now());
+}
+const snap = (v) => Math.round(v * scale * dpr) / (scale * dpr);   // whole screen pixels, so the art stays crisp
+function camera() {
+  const vw = cw / scale, vh = (ch - SAFE - TOP) / scale, mw = W * T, mh = H * T, cx = player.px + 8, cy = player.py + 8;
+  const x = mw <= vw ? (mw - vw) / 2 : Math.min(Math.max(cx - vw / 2, 0), mw - vw);
+  const y = (mh <= vh ? (mh - vh) / 2 : Math.min(Math.max(cy - vh / 2, 0), mh - vh)) - TOP / scale;
+  return { x: snap(x), y: snap(y) };
+}
+function shadow(x, y, r) { ctx.fillStyle = "rgba(20, 50, 20, .22)"; ctx.beginPath(); ctx.ellipse(x, y, r, 2.2, 0, 0, Math.PI * 2); ctx.fill(); }
+function grassOver(m) {
+  const x = Math.round(m.px / T), y = Math.round(m.py / T);
+  if (tileAt(x, y) === TALL) ctx.drawImage(TALL_TILE, 0, 9, T, 7, x * T, y * T + 9, T, 7);
+}
+function drawPerson(e, ts) {
+  let alpha = 1, lift = 0;
+  if (e.type === "agent") {
+    if (e.word === "done" || e.word === "interrupted") alpha = 0.75;
+    if (e.word === "unknown") alpha = 0.55 + 0.15 * Math.sin(ts / 400);
+    if (e.word === "working" && !e.move && !e.path.length) lift = Math.floor(ts / 260 + e.seed) % 2;
+    if (e.born && ts - e.born < 600) alpha *= Math.max(0, (ts - e.born) / 600);
+    if (e.leaving) alpha *= Math.max(0, 1 - (ts - e.leaving) / 700);
+  }
+  e.lift = lift;
+  ctx.globalAlpha = alpha;
+  shadow(e.px + 8, e.py + 14, 6);
+  const frame = e.move && e.move.t < 0.5 ? (e.steps % 2 ? 1 : 2) : 0;
+  ctx.drawImage(personSprite(e.look, e.dir, frame), snap(e.px), snap(e.py - 4 - lift));
+  grassOver(e);
+  ctx.globalAlpha = 1;
+}
+function drawCreature(c, ts) {
+  const hop = c.status === "running" ? Math.abs(Math.sin(ts / 170 + c.seed)) * 4 : 0;
+  shadow(c.px + 8, c.py + 14, 4.5 - hop * 0.3);
+  ctx.globalAlpha = c.status === "failed" ? 0.6 : 1;
+  ctx.drawImage(creatureSprite(c.seed, c.status !== "running"), snap(c.px + 2), snap(c.py + 4 - hop));
+  grassOver(c);
+  ctx.globalAlpha = 1;
+}
+function drawCat(ts) {
+  const bob = cat.move ? Math.abs(Math.sin(ts / 90)) * 1.5 : 0;
+  shadow(cat.px + 8, cat.py + 14, 4.5);
+  ctx.save();
+  if (cat.dir === "left") { ctx.translate(snap(cat.px) * 2 + 16, 0); ctx.scale(-1, 1); }
+  ctx.drawImage(CAT, snap(cat.px + 2), snap(cat.py + 4 - bob));
+  ctx.restore();
+  grassOver(cat);
+}
+function drawGround(ts, light) {
+  ctx.drawImage(mapArt(Math.floor(ts / 650) % 2), 0, 0);
+  BUILDINGS.forEach((b) => ctx.drawImage(buildingArt(b, light.lit || busyPlaces.has(b.place), false), b.x * T, b.y * T - M));
+  PLOTS.forEach((p) => {
+    const X = p.x * T, Y = p.y * T;
+    if (!p.folder) { ctx.drawImage(LOT, X, Y - M); return; }
+    const art = buildingArt(p, light.lit && p.awake, !p.awake), k = p.build ? (ts - p.build) / BUILD_MS : 1;
+    if (k < 1) {
+      // A house rising from its scaffold.
+      ctx.drawImage(LOT, X, Y - M);
+      const h = Math.round((48 + M) * Math.max(0, k));
+      if (h > 0) ctx.drawImage(art, 0, 48 + M - h, 64, h, X, Y + 48 - h, 64, h);
+      ctx.fillStyle = "#8a5a30";
+      for (const sx of [2, 30, 60]) ctx.fillRect(X + sx, Y - 4, 2, 52);
+      for (let sy = 6; sy < 48; sy += 12) ctx.fillRect(X + 1, Y + sy, 62, 2);
+    } else {
+      ctx.drawImage(art, X, Y - M);
+      // The mailbox: its flag goes up when someone of this house wrote to you.
+      const flag = state && state.agents.some((a) => a.folder === p.folder && unread(letterOf(a)));
+      const bx = X + 54, by = Y + 38;
+      rect(ctx, bx + 2, by + 5, 2, 7, "#6a4a30"); rect(ctx, bx, by, 7, 6, "#2a2a38"); rect(ctx, bx + 1, by + 1, 5, 4, "#4f7fd0");
+      if (flag) { const wave = Math.floor(ts / 300) % 2; rect(ctx, bx + 7, by - 4, 1, 7, "#2a2a38"); rect(ctx, bx + 8, by - 4 + wave, 4, 2, "#e2463c"); }
+    }
+  });
+  for (const p of new Set(PROPS.values())) {
+    const X = p.x * T, Y = p.y * T;
+    if (PROP_ART[p.type]) ctx.drawImage(PROP_ART[p.type], X, Y);
+    else if (p.type === "oak") ctx.drawImage(TREE_ART, X, Y, 2 * T, 2 * T);
+    else if (p.type === "tent") { p.art = p.art || tentArt(p.color, p.dark); ctx.drawImage(p.art, X, Y); }
+    else if (p.type === "candy") { ctx.drawImage(BALL, X + 4, Y + 6); if (Math.floor(ts / 400) % 3 === 0) { rect(ctx, X + 11, Y + 3, 1, 3, "#ffffff"); rect(ctx, X + 10, Y + 4, 3, 1, "#ffffff"); } }
+    else if (p.type === "fire") {
+      rect(ctx, X + 3, Y + 11, 10, 2, "#6a4224"); rect(ctx, X + 5, Y + 12, 6, 2, "#8a5a30");
+      const f = Math.floor(ts / 120) % 3;
+      rect(ctx, X + 5, Y + 6 + f % 2, 6, 6, "#e0602a"); rect(ctx, X + 6 + (f === 2 ? 1 : 0), Y + 4 + f, 4, 6, "#ffb040"); rect(ctx, X + 7, Y + 7, 2, 4, "#ffe080");
+    } else if (p.type === "fountain") {
+      const K = "#2a2a38";
+      rect(ctx, X + 1, Y + 6, 46, 40, K); rect(ctx, X + 2, Y + 7, 44, 38, "#b8b0a0"); rect(ctx, X + 5, Y + 10, 38, 32, "#5aa6e6");
+      const o = Math.floor(ts / 300) % 4;
+      rect(ctx, X + 8 + o * 3, Y + 16, 6, 1, "#a6d4f7"); rect(ctx, X + 26 - o * 2, Y + 34, 7, 1, "#a6d4f7"); rect(ctx, X + 30, Y + 22 + (o % 2), 5, 1, "#a6d4f7");
+      rect(ctx, X + 20, Y + 18, 8, 12, K); rect(ctx, X + 21, Y + 19, 6, 10, "#d8d0c0");
+      for (let i = 0; i < 6; i++) { const a = ts / 400 + i; rect(ctx, X + 23 + Math.round(Math.cos(a * 1.7) * (4 + (i % 3) * 3)), Y + 10 + ((ts / 60 + i * 7) % 10), 2, 2, "#d8eefb"); }
+    }
+  }
+}
+function drawLife(ts, light) {
+  for (const m of motes) { ctx.globalAlpha = Math.max(0, m.life / m.max); ctx.fillStyle = m.color; ctx.fillRect(m.x, m.y, m.size, m.size); }
+  ctx.globalAlpha = 1;
+  if (!light.night) for (const [bx, by, col] of BUTTERFLIES) {
+    const x = bx * T + Math.sin(ts / 900 + bx) * 22, y = by * T + Math.cos(ts / 700 + by) * 10, wing = Math.floor(ts / 120) % 2;
+    rect(ctx, x, y, 1, 2, "#3a2a20"); rect(ctx, x - 2, y - wing, 2, 2, col); rect(ctx, x + 1, y - wing, 2, 2, col);
+  }
+}
+function drawSpeech(text, sx, sy) {
+  ctx.font = "600 11.5px ui-monospace, Menlo, monospace"; ctx.textBaseline = "top"; ctx.textAlign = "start";
+  const lines = [""];
+  for (const w of text.split(" ")) {
+    const next = (lines[lines.length - 1] + " " + w).trim();
+    if (ctx.measureText(next).width > 190 && lines[lines.length - 1]) { if (lines.length === 3) { lines[2] += "…"; break; } lines.push(w); }
+    else lines[lines.length - 1] = next;
+  }
+  const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 16, h = lines.length * 14 + 10, x = Math.round(sx - w / 2), y = Math.round(sy - h - 8);
+  ctx.fillStyle = "#ffffff"; ctx.strokeStyle = "#2a2a38"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 7); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(sx - 5, y + h - 1); ctx.lineTo(sx, y + h + 7); ctx.lineTo(sx + 5, y + h - 1); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(sx - 5, y + h); ctx.lineTo(sx, y + h + 7); ctx.lineTo(sx + 5, y + h); ctx.stroke();
+  ctx.fillStyle = "#262a3a"; lines.forEach((l, i) => ctx.fillText(l, x + 8, y + 6 + i * 14));
+}
+function tag(text, sx, sy, color) {
+  ctx.font = "700 12px ui-monospace, Menlo, monospace"; ctx.textBaseline = "middle"; ctx.textAlign = "start";
+  const w = ctx.measureText(text).width + (color ? 22 : 12), x = Math.round(sx - w / 2), y = Math.round(sy - 19);
+  ctx.fillStyle = "rgba(30, 34, 52, .9)"; ctx.beginPath(); ctx.roundRect(x, y, w, 19, 5); ctx.fill();
+  if (color) { ctx.fillStyle = color; ctx.fillRect(x + 7, y + 6, 7, 7); }
+  ctx.fillStyle = "#ffffff"; ctx.fillText(text, x + (color ? 18 : 6), y + 10);
+}
+function plate(text, wx, wy, size, color, stroke, room) {
+  ctx.font = `700 ${size}px ui-monospace, Menlo, monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t).width > room) t = t.slice(0, -2) + "…";
+  if (stroke) { ctx.lineWidth = Math.max(2, size / 4); ctx.lineJoin = "round"; ctx.strokeStyle = stroke; ctx.strokeText(t, wx, wy); }
+  ctx.fillStyle = color; ctx.fillText(t, wx, wy);
+  ctx.textAlign = "start";
+}
+function iconOf(e) {
+  if (e.type !== "agent") return e.type === "creature" && e.status === "failed" ? BUBBLE.error : null;
+  if (e.word === "working") return e.move || e.path.length ? ["…", "#2f9a52"] : WORK_ICON[e.place] || ["…", "#2f9a52"];
+  if ((e.word === "idle" || e.word === "done") && unread(letterOf(agentById(e.id)))) return ["letter", "#e2463c"];
+  return BUBBLE[e.word] || null;
+}
+function draw(ts) {
+  if (!cw) return;
+  const cam = camera(), k = scale * dpr, light = daylight();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = false;
+  ctx.setTransform(k, 0, 0, k, -cam.x * k, -cam.y * k);
+  const vx = cam.x - T, vy = cam.y - T, vw = cw / scale + 2 * T, vh = ch / scale + 2 * T;
+  ctx.fillStyle = forest; ctx.fillRect(Math.floor(vx / T) * T, Math.floor(vy / T) * T, vw + T, vh + T);
+  drawGround(ts, light);
+  const all = [...agentsE.values(), ...FIXED, ...creaturesE.values(), cat, player].sort((a, b) => a.py - b.py || (a === player ? 1 : -1));
+  all.forEach((e) => e.type === "creature" ? drawCreature(e, ts) : e.type === "cat" ? drawCat(ts) : drawPerson(e, ts));
+  drawLife(ts, light);
+  if (light.tint) {
+    ctx.fillStyle = light.tint; ctx.fillRect(vx, vy, vw, vh);
+    ctx.globalCompositeOperation = "lighter";
+    const lights = [...PLOTS.filter((p) => p.folder && p.awake).map((p) => [p.x * T + 45, p.y * T + 32]), [FIRE.x * T + 8, FIRE.y * T + 8],
+      ...BUILDINGS.map((b) => [b.x * T + b.w * 8, b.y * T + b.h * T - 10])];
+    for (const [x, y] of lights) {
+      const glow = ctx.createRadialGradient(x, y, 0, x, y, 24);
+      glow.addColorStop(0, "rgba(255, 200, 110, .35)"); glow.addColorStop(1, "rgba(255, 200, 110, 0)");
+      ctx.fillStyle = glow; ctx.fillRect(x - 24, y - 24, 48, 48);
+    }
+    if (light.night) for (const f of FIREFLIES) {
+      const x = f.x + Math.sin(ts / 1100 + f.s) * 18, y = f.y + Math.cos(ts / 900 + f.s * 2) * 10, a = (Math.sin(ts / 300 + f.s) + 1) / 2;
+      ctx.fillStyle = `rgba(230, 255, 120, ${0.25 + a * 0.6})`; ctx.fillRect(x, y, 1.5, 1.5);
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+  // The tower's red light, and marks above heads, after the night, so they stay bright.
+  const tower = BUILDINGS[4];
+  if (Math.floor(ts / 700) % 2 || busyPlaces.has("tower")) rect(ctx, tower.x * T + 23, tower.y * T - 10, 2, 2, "#ff4040");
+  if (busyPlaces.has("tower")) { ctx.strokeStyle = "rgba(160, 120, 255, .7)"; ctx.lineWidth = 1; const r = (ts / 30) % 18; ctx.beginPath(); ctx.arc(tower.x * T + 24, tower.y * T - 9, r, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+  const dots = 1 + Math.floor(ts / 350) % 3;
+  for (const e of [...agentsE.values(), ...creaturesE.values()]) {
+    if (e.leaving) continue;
+    const b = iconOf(e);
+    if (!b) continue;
+    const float = b[0] === "!" || b[0] === "letter" ? Math.abs(Math.sin(ts / 220)) * 2 : b[0] === "z" ? Math.sin(ts / 600) * 1.5 : 0;
+    const top = e.type === "creature" ? e.py - 8 : e.py - 17 - (e.lift || 0);
+    ctx.drawImage(bubbleSprite(b, dots), snap(e.px + 3), snap(top - float));
+  }
+  // Words at the screen's own resolution: names on the roofs, plates, who is near, what was just said.
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const sx = (wx) => (wx - cam.x) * scale, sy = (wy) => (wy - cam.y) * scale;
+  PLOTS.forEach((p) => {
+    if (p.folder && (!p.build || ts - p.build > BUILD_MS)) plate(base(p.folder), sx(p.x * T + 32), sy(p.y * T + 13.5), 6.5 * scale, "#ffffff", "#2a2a38", 58 * scale);
+    else if (!p.folder) plate("TO BUILD", sx(p.x * T + 32), sy(p.y * T + 26), 5 * scale, "#fff3d6", "#6a4224", 56 * scale);
+  });
+  BUILDINGS.forEach((b) => {
+    if (b.tower) plate(b.name, sx(b.x * T + 24), sy(b.y * T + 53), 4.5 * scale, "#ffffff", null, 38 * scale);
+    else plate(b.name, sx(b.x * T + b.w * 8), sy(b.y * T + 13), (b.name.length > 8 ? 5.5 : 7) * scale, b.id === "centre" ? "#e0504a" : "#2a2a38", null, (b.style.plate - 2) * scale);
+  });
+  for (const e of [...agentsE.values(), ...FIXED, ...creaturesE.values(), cat]) {
+    if (e.leaving || !e.name) continue;
+    const close = Math.abs(e.px - player.px) + Math.abs(e.py - player.py) <= 2 * T;
+    const top = e.type === "creature" || e.type === "cat" ? e.py - 1 : e.py - 4 - (iconOf(e) ? 15 : 1);
+    if (e.say && e.say.until > ts && e.type === "agent") { drawSpeech(e.say.text, sx(e.px + 8), sy(top)); continue; }
+    if (e === hover || e === talkingTo || close) tag(e.name, sx(e.px + 8), sy(top), e.color || null);
+  }
+}
+
+/* ---------- The card, the mini map ---------- */
+
+let cardFor = null, cardAt = 0;
+function updateCard(ts) {
+  if (ts < cardAt) return;
+  cardAt = ts + 200;
+  let e = null;
+  if (!busy) {
+    if (hover && hover.type === "agent") e = hover;
+    else { const [dx, dy] = DIRS[player.dir]; const front = occupied.get(tk(player.x + dx, player.y + dy)); e = front && front.type === "agent" ? front : null; }
+  }
+  const a = e && agentById(e.id), card = $("card");
+  card.hidden = !a;
+  if (!a) { cardFor = null; return; }
+  if (cardFor !== a.id) card.innerHTML = `<div class="top"><span class="nm"></span><span class="lv"></span></div><div class="kd"><i></i><span class="kn"></span></div>
+    <div class="st"></div><div class="ac"></div><div class="mt"></div><div class="go">Space: talk to them</div>`;
+  cardFor = a.id;
+  const w = word(a.state), thread = threadOf(a), items = thread ? thread.turns.reduce((n, t) => n + t.items.length, 0) : 0, last = lastItem(a), l = letterOf(a);
+  card.querySelector(".nm").textContent = isAssistant(a) ? "Your assistant" : a.name ?? "unknown";
+  card.querySelector(".lv").textContent = `N.${Math.max(1, items)}`;
+  card.querySelector(".kd i").style.background = kindColor(a.kind);
+  card.querySelector(".kn").textContent = `${label(a.kind).toUpperCase()}${a.origin === "elsewhere" ? " · ELSEWHERE" : ""}`;
+  const st = card.querySelector(".st"); st.textContent = `${MARK[w][0]} ${SAYS[w]} · ${e.place ? PLACES[e.place].at : ""}`; st.style.color = MARK[w][1];
+  card.querySelector(".ac").textContent = w === "working" && last ? line(doing(last), 110) : l && unread(l) ? "✉ A letter is waiting for you." : "";
+  card.querySelector(".mt").textContent = [[a.model, a.mode, a.effort].filter(Boolean).join(" · "), tilde(a.folder), `active ${ago(a.updated)}`,
+    a.queue.length ? `${a.queue.length} on hold` : ""].filter(Boolean).join(" · ");
+}
+const MINI = 3, mini = $("mini"), mctx = mini.getContext("2d");
+mini.width = W * MINI; mini.height = H * MINI; mini.style.width = W * MINI + "px"; mini.style.height = H * MINI + "px";
+const MINI_COLORS = { [GRASS]: "#8fd06e", [TALL]: "#58ad4a", [PATH]: "#ead9a6", [WATER]: "#5aa6e6", [TREE]: "#2e7a3c", [FLOWER]: "#a8dc84", [SIGN]: "#a8743e", [PAVE]: "#ddd6c6", [PIER]: "#c4925a", [PROP]: "#b0a890" };
+let miniAt = 0;
+function drawMini(ts) {
+  if (ts < miniAt) return;
+  miniAt = ts + 250;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { mctx.fillStyle = MINI_COLORS[tileAt(x, y)] || "#8a8a96"; mctx.fillRect(x * MINI, y * MINI, MINI, MINI); }
+  BUILDINGS.forEach((b) => { mctx.fillStyle = b.tower ? "#7a5cd0" : b.style.roof; mctx.fillRect(b.x * MINI, b.y * MINI, b.w * MINI, b.h * MINI); });
+  PLOTS.forEach((p) => { mctx.fillStyle = p.folder ? p.style.roof : "#c9a878"; mctx.fillRect(p.x * MINI, p.y * MINI, p.w * MINI, p.h * MINI); });
+  const blink = Math.floor(ts / 400) % 2;
+  for (const e of agentsE.values()) {
+    if (e.leaving) continue;
+    mctx.fillStyle = e.word === "waiting" ? (blink ? "#e2463c" : "#ffffff") : MARK[e.word][1];
+    mctx.fillRect(Math.round(e.px / T * MINI) - 1, Math.round(e.py / T * MINI) - 1, 4, 4);
+  }
+  mctx.fillStyle = "#262836"; mctx.fillRect(Math.round(player.px / T * MINI) - 2, Math.round(player.py / T * MINI) - 2, 6, 6);
+  mctx.fillStyle = blink ? "#ffffff" : "#e2463c"; mctx.fillRect(Math.round(player.px / T * MINI) - 1, Math.round(player.py / T * MINI) - 1, 4, 4);
+  const cam = camera();
+  mctx.strokeStyle = "rgba(38, 40, 54, .55)"; mctx.lineWidth = 1;
+  mctx.strokeRect(Math.max(0, cam.x / T * MINI) + 0.5, Math.max(0, (cam.y + TOP / scale) / T * MINI) + 0.5,
+    Math.min(W * MINI, cw / scale / T * MINI) - 1, Math.min(H * MINI, (ch - SAFE - TOP) / scale / T * MINI) - 1);
+}
+
+function frame(ts) {
+  const dt = Math.min(0.05, (ts - (frame.last || ts)) / 1000); frame.last = ts;
+  rebuildOccupied();
+  stepPlayer(dt, ts);
+  for (const [id, e] of agentsE) { if (e.leaving && ts - e.leaving > 700) agentsE.delete(id); else stepAgent(e, dt, ts); }
+  stepCreatures(dt, ts); stepCat(dt, ts); stepFixed(ts); stepMotes(dt, ts);
+  typeTick(dt); draw(ts); updateCard(ts); drawMini(ts);
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Keys and mouse ---------- */
+
+const KEYS = { ArrowUp: "up", KeyW: "up", ArrowDown: "down", KeyS: "down", ArrowLeft: "left", KeyA: "left", ArrowRight: "right", KeyD: "right" };
+const KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
+const typedKeys = [];
+function secretCode(e) {
+  typedKeys.push(e.key.length === 1 ? e.key.toLowerCase() : e.key);
+  if (typedKeys.length > KONAMI.length) typedKeys.shift();
+  if (typedKeys.join() !== KONAMI.join()) return;
+  typedKeys.length = 0;
+  memory.doc.gb = !memory.doc.gb; memory.touch("gb");
+  document.body.classList.toggle("gb", memory.doc.gb);
+  toast(memory.doc.gb ? "Four-green mode! (same code to go back)" : "Back to colors."); SFX.fanfare(); earn("retro");
+}
+addEventListener("keydown", (e) => {
+  wake();
+  if (e.metaKey || e.ctrlKey || e.altKey) return;              // ⌘K, ⌘J… belong to something
+  player.run = e.shiftKey;
+  if (e.target === $("input")) {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (UI.submit) UI.submit(UI.fallback); }
+    else if (e.key === "Escape") { e.preventDefault(); pickNow(null); }
+    return;
+  }
+  secretCode(e);
+  const dir = KEYS[e.code], A = ["Space", "Enter", "NumpadEnter"].includes(e.code), B = e.code === "Escape" || e.code === "Backspace", Mk = e.key === "m" || e.key === "M";
+  if (dir || A || B || Mk) e.preventDefault();
+  if (A && e.repeat) return;
+  if (UI.mode === "say") { if (A || B) advance(); return; }
+  if (UI.mode === "choose") {
+    if (dir === "up" || dir === "down") { mark(UI.index + (dir === "up" ? -1 : 1)); SFX.blip(); }
+    else if (A) pickNow(UI.options[UI.index].key); else if (B) pickNow(null);
+    return;
+  }
+  if (UI.mode === "panel") {
+    if (dir === "up" || dir === "down") { if (UI.rows.length) markRow(UI.index + (dir === "up" ? -1 : 1)); else (!$("pbody").hidden ? $("pbody") : $("plist")).scrollBy(0, dir === "up" ? -70 : 70); }
+    else if ((dir === "left" || dir === "right") && UI.acts.length) markAct(UI.act + (dir === "left" ? -1 : 1));
+    else if (A) pickNow(UI.rows.length ? UI.rows[UI.index].key : UI.acts.length ? UI.acts[UI.act].key : null); else if (B) pickNow(null);
+    return;
+  }
+  if (UI.mode === "input") { if (B) pickNow(null); return; }
+  if (busy) return;
+  if (dir) {
+    if (!held.includes(dir)) held.push(dir);
+    player.path = []; player.goal = null;
+    if (!player.move && player.dir !== dir) { player.dir = dir; player.turnAt = performance.now() + 90; }
+  } else if (A) { const [dx, dy] = DIRS[player.dir]; interact(thingAt(player.x + dx, player.y + dy)); }
+  else if (B || Mk) converse(startMenu);
+});
+addEventListener("keyup", (e) => { player.run = e.shiftKey; const dir = KEYS[e.code]; if (dir && held.includes(dir)) held.splice(held.indexOf(dir), 1); });
+addEventListener("blur", () => { held.length = 0; player.run = false; });
+function tileUnder(e) {
+  const cam = camera(), wx = e.clientX / scale + cam.x, wy = e.clientY / scale + cam.y;
+  const x = Math.floor(wx / T), y = Math.floor(wy / T);
+  // Heads stick 4 pixels into the tile above: a click on a head is a click on its owner.
+  return occupied.has(tk(x, y + 1)) && wy % T >= 11 ? [x, y + 1] : [x, y];
+}
+cv.addEventListener("pointerdown", (e) => {
+  wake();
+  if (UI.mode === "say") return advance();
+  if (busy || UI.mode) return;
+  goTo(...tileUnder(e));
+});
+cv.addEventListener("pointermove", (e) => {
+  const [x, y] = tileUnder(e), thing = thingAt(x, y);
+  hover = thing && thing.name ? thing : null;
+  cv.style.cursor = thing && thing.type !== "tree" ? "pointer" : "default";
+});
+mini.addEventListener("pointerdown", (e) => { wake(); if (!busy && !UI.mode) goTo(Math.floor(e.offsetX / MINI), Math.floor(e.offsetY / MINI)); });
+$("dialog").addEventListener("click", () => { if (UI.mode === "say") advance(); });
+$("menuBtn").addEventListener("click", () => { wake(); converse(startMenu); });
+$("mailBtn").addEventListener("click", () => { wake(); converse(courrier); });
+$("pclose").addEventListener("click", () => pickNow(null));
+
+/* ---------- Start ---------- */
+
+function problem(error) { $("problem").hidden = !error; $("problem").textContent = error ? error.message : ""; }
+// What the memory says about the world itself: the person's place, the secrets already found, the look.
+function remember() {
+  const d = memory.doc;
+  document.body.classList.toggle("gb", !!d.gb);
+  if (d.found.candy && PROPS.has(tk(CANDY.x, CANDY.y))) { PROPS.delete(tk(CANDY.x, CANDY.y)); lay(CANDY.x, CANDY.y, 1, 1, FLOWER); }
+  if (d.found.simularbre) lay(SIMULARBRE[0], SIMULARBRE[1], 1, 1, GRASS);
+  maps.clear();
+  if (d.player && walkable(d.player.x, d.player.y) && !fixedAt(d.player.x, d.player.y)) { placeAt(player, d.player.x, d.player.y); player.dir = d.player.dir || "down"; }
+}
+addEventListener("resize", resize);
+resize();
+requestAnimationFrame(frame);
+if (!S) problem({ message: "Open this village in something: only something can bring your agents here." });
+else (async () => {
+  await memory.load();
+  remember();
+  S.on("change", (next) => sync(next));
+  S.on("granted", () => memory.load().then(() => S.state()).then(sync, problem));   // a right given or revoked
+  await S.state().then((next) => { sync(next); problem(null); draw(performance.now()); }, problem);
+})();
+</script>
+</body>
+</html>

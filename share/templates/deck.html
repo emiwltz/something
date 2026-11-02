@@ -1,0 +1,423 @@
+<!doctype html>
+<!-- Decision Deck, for something (contract 1). Every question an agent ended its turn with, as a pile of cards: a click
+     sends the answer, Other lets the person type, a permission stays for something's window, and a conversation started
+     elsewhere offers Continue it here. It keeps no memory: the pile is rebuilt from the state each time it opens. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decision Deck</title>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "Decision Deck",
+  "description": "Your agents' questions in one pile of cards, with their answers as buttons.",
+  "agents": { "see": "all" },
+  "rights": ["state", "send", "launch"]
+}
+</script>
+<style>
+  [hidden] { display: none !important; }
+  :root {
+    color-scheme: light;
+    --ui: -apple-system, system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --voice: ui-serif, "New York", Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: #E9ECF1; overflow-x: hidden; }
+  button { font-family: inherit; }
+  button:focus-visible, input:focus-visible { outline: 2px solid #4A5BD0; outline-offset: 2px; }
+
+  .dk { position: relative; min-height: max(100vh, 400px); color: #15171C; font-family: var(--ui); }
+  .dk-top { position: absolute; left: 22px; right: 22px; top: 18px; display: flex; align-items: baseline; justify-content: space-between; }
+  .dk-top h1 { margin: 0; font: 700 17px/1 var(--ui); letter-spacing: -.01em; }
+  .dk-count { font: 500 12px/1 var(--ui); color: #5D6270; }
+
+  .dk-pile { position: absolute; left: 0; right: 0; top: max(50px, calc(50vh - 190px)); width: min(440px, calc(100% - 44px));
+             height: clamp(306px, calc(100vh - 94px), 380px); margin: 0 auto; }
+  .dk-card { position: absolute; inset: 0; background: #FFFFFF; border-radius: 18px; padding: 18px 20px; display: flex; flex-direction: column; gap: 9px; overflow: hidden;
+    box-shadow: 0 1px 2px rgba(20,24,35,.06), 0 12px 30px rgba(20,24,35,.10); transition: transform .5s cubic-bezier(.2,.8,.2,1), opacity .5s ease; transform-origin: 50% 100%; }
+  .dk-card[data-pos="1"] { transform: translateY(10px) scale(.96); }
+  .dk-card[data-pos="2"] { transform: translateY(20px) scale(.92); }
+  .dk-card[data-pos="3"] { transform: translateY(28px) scale(.88); opacity: 0; }
+  .dk-card[data-pos="gone"] { transform: translate(470px, -30px) rotate(14deg); opacity: 0; pointer-events: none; }
+  .dk-card:not([data-pos="0"]) > * { opacity: 0; }
+  .dk-who { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 12px; font: 600 11.5px/1 var(--ui); color: #3B3F4A; }
+  .dk-who small { flex: none; font-weight: 500; font-size: inherit; color: #6E7380; }
+  .m-kind { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+  .m-kind::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--k); }
+  .dk-q { flex: 0 1 auto; min-height: 2.6em; overflow: auto; font: 600 17px/1.3 var(--ui); letter-spacing: -.01em; color: #15171C; margin: 0; overflow-wrap: anywhere; }
+  .dk-links { flex: none; display: flex; align-items: baseline; }
+  .dk-why, .dk-later { font: 500 11.5px/1 var(--ui); color: #4A5BD0; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted rgba(74,91,208,.5); text-underline-offset: 3px; }
+  .dk-later { margin-left: auto; color: #5D6270; text-decoration-color: rgba(93,98,112,.5); }
+  .dk-opts { flex: none; display: grid; gap: 6px; margin-top: auto; }
+  .dk-opts button { min-width: 0; text-align: left; font: 500 13px/1.1 var(--ui); padding: 9px 12px; border-radius: 10px; border: 1px solid #DADDE4; background: #F7F8FA; color: #15171C; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dk-opts button:hover { border-color: #9DAAF0; }
+  .dk-opts button.picked { background: #2B47C9; border-color: #2B47C9; color: #FFFFFF; }
+  .dk-opts .dk-other { border-style: dashed; background: transparent; color: #5D6270; }
+  .dk-free { display: flex; gap: 6px; }
+  .dk-free input { flex: 1; min-width: 0; font: 400 13px/1.1 var(--ui); padding: 9px 11px; border-radius: 10px; border: 1px solid #9DAAF0; outline: none; color: #15171C; }
+  .dk-opts .dk-free button { flex: none; font: 600 12px/1 var(--ui); padding: 0 12px; border-radius: 10px; border: 0; background: #2B47C9; color: #fff; }
+  .dk-ro { flex: none; font: 500 12px/1.35 var(--ui); color: #6F5100; background: #FFF4D6; padding: 8px 10px; border-radius: 9px; margin: 0; }
+  /* With one card left there is no next one to go to. */
+  .solo [data-skip] { display: none; }
+
+  .dk-layer { position: absolute; left: 0; right: 0; bottom: 0; top: 96px; overflow: auto; background: #FFFFFF; padding: 12px 20px 16px; border-top: 1px solid #EEF0F4; display: grid; align-content: start; gap: 6px;
+    transition: transform .35s cubic-bezier(.2,.8,.2,1), opacity .3s ease; }
+  .dk-layer.out { transform: translateY(30px); opacity: 0; pointer-events: none; }
+  .dk-layer h2 { margin: 0; font: 600 11px/1 var(--mono); letter-spacing: .06em; color: #6E7380; display: flex; justify-content: space-between; }
+  .dk-layer h2 button { font: 600 11px/1 var(--ui); color: #4A5BD0; background: none; border: 0; cursor: pointer; padding: 0; letter-spacing: 0; }
+  .dk-layer ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font: 400 12.5px/1.4 var(--ui); color: #3B3F4A; }
+  .dk-layer li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dk-layer li code { font: 500 11px/1 var(--mono); background: #F1F2F6; padding: 2px 5px; border-radius: 5px; }
+  .dk-layer blockquote { margin: 4px 0 0; padding: 8px 10px; border-radius: 9px; background: #F4F5F8; font: 400 12.5px/1.45 var(--voice); color: #2B2E36; overflow-wrap: anywhere; }
+
+  .dk-done { position: absolute; left: 0; right: 0; top: calc(max(50px, 50vh - 190px) + 100px); width: min(380px, calc(100% - 44px)); margin: 0 auto; text-align: center; transition: opacity .5s ease; }
+  .dk-done b { display: block; font: 700 22px/1.2 var(--ui); }
+  .dk-done span { font: 500 13px/1.4 var(--ui); color: #5D6270; }
+  .dk-sent { position: absolute; left: 76px; right: 76px; bottom: 12px; margin: 0; font: 500 12px/1.3 var(--ui); color: #22694A; text-align: center; transition: opacity .3s ease; }
+  .dk-sent.fail { color: #B3261E; }
+  @media (prefers-reduced-motion: reduce) { .dk-card, .dk-layer, .dk-done, .dk-sent { transition: none; } }
+</style>
+</head>
+<body>
+<main class="dk">
+  <div class="dk-top"><h1>Decision Deck</h1><span class="dk-count"></span></div>
+  <div class="dk-done" style="opacity:0"><b></b><span></span></div>
+  <div class="dk-pile"></div>
+  <p class="dk-sent" role="status" style="opacity:0"></p>
+</main>
+<script>
+  // something.js is injected before this script. Every call returns a promise; a rejection's .message is one sentence
+  // for the person, and this page puts it on screen.
+  const pile = document.querySelector(".dk-pile"), done = document.querySelector(".dk-done"),
+        sent = document.querySelector(".dk-sent"), count = document.querySelector(".dk-count");
+  const KINDS = {
+    claude: ["Claude Code", "#C2613D"], codex: ["Codex", "#2F7D6B"], opencode: ["OpenCode", "#4A5BD0"], pi: ["pi", "#8A5CC2"],
+    omp: ["OMP", "#B0762A"], amp: ["Amp", "#C23D78"], antigravity: ["Antigravity", "#3B7FB5"], cursor: ["Cursor", "#3B3F4A"],
+  };
+  const kindOf = (kind) => KINDS[kind] || ["other agent", "#8A8F9C"];
+  const label = (kind) => kindOf(kind)[0];
+  // A right counts when granted plainly ("send") or for this kind ("send:claude").
+  const has = (right, kind) => (something.granted?.rights ?? []).some((r) => r === right || r === right + ":" + kind);
+
+  let state = null, skew = 0, order = [], busy = false, front = null;
+  const cards = new Map();      // key → card element; a card is made once, so a change never disturbs what is typed
+  const answered = new Set();   // keys already sent, until the state catches up
+
+  // Ages are measured on the state's own clock.
+  function ago(iso) {
+    if (!iso) return "unknown";
+    const s = Math.max(0, (Date.now() + skew - Date.parse(iso)) / 1000);
+    if (s < 60) return "just now";
+    if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+    return s < 172800 ? "yesterday" : `${Math.floor(s / 86400)} days ago`;
+  }
+
+  // Reading a question out of the agent's last message: its last sentence if it ends with "?", with the list next to it
+  // as the answers. Without a list, a question that opens like a yes-or-no gets Yes and No; any other gets Other alone.
+  const plain = (text) => text.replace(/\*\*|__|`/g, "").trim();
+  const entry = (line) => (line.match(/^(?:[-*•]|\d+[.)]|[A-Za-z][.)])\s+(.+)$/) || [])[1];
+  const lastSentence = (line) => line.split(/(?<=[.!?…])\s+/).at(-1);
+  const INVITES = /\b(choose|pick|which|prefer|select|options?)\b/i;
+  const YES_NO = /^(should|shall|do|does|did|can|could|would|will|is|are|was|were|keep|want|ok|okay)\b/i;
+  function readQuestion(text) {
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    let from = lines.length;
+    while (from > 0 && entry(lines[from - 1])) from--;
+    let q, opts, head;
+    if (lines.length - from >= 2 && from > 0) {          // the list comes last, the question above it
+      q = plain(lastSentence(lines[from - 1]));
+      if (!q.endsWith("?") && !(q.endsWith(":") && INVITES.test(q))) return null;
+      opts = lines.slice(from).map(entry);
+      head = from - 1;
+    } else {                                             // the question comes last, perhaps a list above it
+      if (!lines.length) return null;
+      q = plain(lastSentence(lines.at(-1)));
+      if (!q.endsWith("?")) return null;
+      head = lines.length - 1;
+      let top = head;
+      while (top > 0 && entry(lines[top - 1])) top--;
+      opts = lines.slice(top, head).map(entry);
+      head = top;
+    }
+    opts = opts.length >= 2 && opts.length <= 6 ? opts.map((o) => plain(o).replace(/[.;,]$/, "")) : [];
+    if (!opts.length && YES_NO.test(q) && !/\bor\b/i.test(q)) opts = ["Yes", "No"];
+    const before = plain(lines.slice(0, head).join(" ")), said = before.length > 280 ? "…" + before.slice(-280) : before;
+    return { q, opts, said };
+  }
+
+  // What the agent just did, for "Why is it asking?": null when its turn says nothing.
+  function turnNotes(items, said) {
+    const did = items.filter((i) => i.kind === "tool").slice(-6).map((i) => {
+      const line = (i.text || "").split("\n")[0], name = i.tool?.name ?? "";
+      return { name: line.toLowerCase().includes(name.toLowerCase()) ? "" : name, line, failed: i.tool?.status === "failed" };
+    });
+    return did.length || said ? { did, said } : null;
+  }
+
+  // Every card the state holds now: a request first for its agent, else the question ending its turn. A conversation
+  // that shows twice, read elsewhere and continued here, counts once, as the agent that can hear.
+  function questions() {
+    const found = [], threads = new Set();
+    const agents = [...state.agents].sort((a, b) => Number(b.can.send) - Number(a.can.send));
+    for (const agent of agents) {
+      const thread = state.threads.find((t) => t.id === agent.thread);
+      if (thread) { if (threads.has(thread.id)) continue; threads.add(thread.id); }
+      const turn = thread?.turns.at(-1), items = turn?.items ?? [];
+      const last = items.findLast((i) => i.kind === "message");
+      const base = { agent, kind: agent.kind, where: agent.folder?.split("/").filter(Boolean).at(-1) ?? agent.name ?? "folder unknown" };
+      const request = state.requests.find((r) => r.agent === agent.id);
+      if (request) {
+        const permission = request.kind === "permission", about = request.about ?? request.tool;
+        found.push({ ...base, key: "request/" + request.id, type: "request", at: request.at, rank: 1,
+          q: permission ? `${label(agent.kind)} asks to run ${about ?? "a tool"}.` : request.about ?? `${label(agent.kind)} asks you a question.`,
+          note: permission ? "A permission request. Answer it in something's window: a space can never answer it."
+            : "A question in something's window. Answer it there: a space can never answer it.",
+          why: turnNotes(items, last?.author === "agent" && last.text ? plain(last.text).slice(-280) : "") });
+        continue;
+      }
+      const status = agent.state;
+      if (["working", "error", "interrupted"].includes(status) || (status === "waiting" && agent.can.send)) continue;
+      if (agent.queue.length || !last || last.author !== "agent" || last.truncated || !last.text) continue;
+      const asked = readQuestion(last.text);
+      if (!asked) continue;
+      const q = { ...base, q: asked.q, opts: asked.opts, at: last.at ?? turn.ended ?? agent.updated, why: turnNotes(items, asked.said) };
+      const elsewhere = agent.origin === "elsewhere", id = `${agent.id}/${last.id}/`;
+      if (agent.can.send && has("send", agent.kind)) found.push({ ...q, key: id + "answer", type: "answer", rank: 0 });
+      else if (agent.can.resume && agent.thread && has("launch", agent.kind))
+        found.push({ ...q, key: id + "resume", type: "resume", rank: 2, note: "Started elsewhere: something only reads it." });
+      else found.push({ ...q, key: id + "read", type: "read", rank: 2,
+        note: agent.can.send ? `You did not allow this space to write to ${label(agent.kind)}. Change its sentence beside it (⌘I).`
+          : elsewhere || !agent.because.send ? "Started elsewhere: something only reads it. Answer it where it runs." : agent.because.send });
+    }
+    return found.filter((q) => !answered.has(q.key));
+  }
+
+  const make = (tag, className, text) => {
+    const el = Object.assign(document.createElement(tag), { className: className ?? "", textContent: text ?? "" });
+    if (tag === "button") el.type = "button";
+    return el;
+  };
+
+  function card(q) {
+    const el = make("div", "dk-card");
+    el.q = q;
+    const who = make("div", "dk-who"), kind = make("span", "m-kind", `${label(q.kind)} · ${q.where}`);
+    kind.style.setProperty("--k", kindOf(q.kind)[1]);
+    who.append(kind, make("small", "", ago(q.at)));
+    el.append(who, make("p", "dk-q", q.q));
+
+    const links = make("div", "dk-links");
+    if (q.why) { const why = make("button", "dk-why", "Why is it asking? ›"); why.onclick = () => openLayer(el); links.append(why); }
+    if (q.type === "answer") { const later = make("button", "dk-later", "Later ›"); later.dataset.skip = ""; later.onclick = () => skip(q); links.append(later); }
+    if (links.children.length) el.append(links);
+    if (q.note) el.append(make("p", "dk-ro", q.note));
+
+    const opts = make("div", "dk-opts");
+    if (q.type === "answer") {
+      for (const o of q.opts) {
+        const b = make("button", "", o);
+        b.title = o;
+        b.onclick = () => answer(q, o, b);
+        opts.append(b);
+      }
+      const other = make("button", "dk-other", "Other…"), free = make("div", "dk-free"), input = make("input"), go = make("button", "", "Send");
+      free.hidden = true;
+      Object.assign(input, { type: "text", placeholder: "Your answer, in your words…" });
+      input.setAttribute("aria-label", "Your answer");
+      free.append(input, go);
+      other.onclick = () => { [...opts.children].forEach((c) => { c.hidden = c !== free; }); input.focus({ preventScroll: true }); };
+      const write = () => { if (input.value.trim()) answer(q, input.value.trim()); };
+      go.onclick = write;
+      input.addEventListener("keydown", (event) => { if (event.key === "Enter") write(); });
+      opts.append(other, free);
+    } else {
+      if (q.type === "resume") {
+        const b = make("button", "", "Continue it here");
+        b.onclick = () => resume(q, b);
+        opts.append(b);
+      }
+      const next = make("button", q.type === "resume" ? "dk-other" : "", "Next card");
+      next.dataset.skip = "";
+      next.onclick = () => skip(q);
+      opts.append(next);
+    }
+    el.append(opts);
+
+    if (q.why) {
+      const layer = make("div", "dk-layer out"), h = make("h2", "", "THIS TURN, IN SHORT"), back = make("button", "", "Back");
+      back.onclick = () => closeLayer(el);
+      h.append(back);
+      layer.append(h);
+      layer.inert = true;
+      if (q.why.did.length) {
+        const list = make("ul");
+        for (const d of q.why.did) {
+          const li = make("li", "", d.name ? d.name + " " : "");
+          li.title = d.line;
+          li.append(make("code", "", d.line));
+          if (d.failed) li.append(": failed");
+          list.append(li);
+        }
+        layer.append(list);
+      }
+      if (q.why.said) layer.append(make("blockquote", "", q.why.said));
+      el.append(layer);
+    }
+    return el;
+  }
+
+  // The layer covers the card from the "Why" link down, whatever the question's length.
+  function openLayer(el) {
+    const layer = el.querySelector(".dk-layer");
+    layer.style.top = Math.max(60, el.querySelector(".dk-why").offsetTop - 6) + "px";
+    layer.classList.remove("out");
+    layer.inert = false;
+    layer.querySelector("button").focus({ preventScroll: true });
+  }
+  function closeLayer(el) {
+    const layer = el.querySelector(".dk-layer");
+    layer.classList.add("out");
+    layer.inert = true;
+    el.querySelector(".dk-why").focus({ preventScroll: true });
+  }
+
+  function tell(text, fail) {
+    sent.textContent = text;
+    sent.classList.toggle("fail", Boolean(fail));
+    sent.style.opacity = "1";
+    clearTimeout(tell.timer);
+    tell.timer = setTimeout(() => { sent.style.opacity = "0"; }, fail ? 7000 : 2200);
+  }
+  function focusTop() {
+    const top = cards.get(order[0]);
+    if (top) top.querySelector(".dk-opts button:not([hidden])")?.focus({ preventScroll: true });
+  }
+  function settle(key) {
+    answered.add(key);
+    setTimeout(() => { render(state); focusTop(); }, 380);
+  }
+
+  async function answer(q, text, button) {
+    if (busy) return;
+    busy = true;
+    button?.classList.add("picked");
+    try {
+      const { delivery } = await something.send(q.agent.id, text, { when: "next" });
+      const name = label(q.kind), words = button ? `: “${text}”` : " in your words";
+      tell(delivery === "queued" ? `Held for ${name}${words}. It goes in when its turn ends.` : `Sent to ${name}${words}. It continues.`);
+      settle(q.key);
+    } catch (error) {
+      button?.classList.remove("picked");
+      tell(error.message, true);
+    }
+    busy = false;
+  }
+
+  async function resume(q, button) {
+    if (busy) return;
+    busy = true;
+    button.classList.add("picked");
+    try {
+      front = await something.resume(q.kind, q.agent.thread);
+      tell(`${label(q.kind)} resumed here; it can hear you now.`);
+      settle(q.key);
+    } catch (error) {
+      button.classList.remove("picked");
+      tell(error.message, true);
+    }
+    busy = false;
+  }
+
+  function skip(q) {
+    order = order.filter((k) => k !== q.key).concat(q.key);
+    layout();
+    focusTop();
+  }
+
+  function layout() {
+    order.forEach((key, i) => {
+      const el = cards.get(key);
+      el.dataset.pos = String(Math.min(i, 3));
+      el.style.zIndex = String(10 - Math.min(i, 9));
+      el.inert = i !== 0;
+    });
+    pile.classList.toggle("solo", order.length < 2);
+    const left = order.length;
+    count.textContent = left ? `${left} waiting · about ${Math.max(1, Math.round(left * 0.3))} min` : "Nothing waiting";
+    done.style.opacity = left ? "0" : "1";
+    if (left) return;
+    const [title, line] = done.children;
+    if (!has("state", "") && !state.agents.length) {
+      title.textContent = "No agents to see.";
+      line.textContent = "This space may not see your agents. Change its sentence beside it (⌘I).";
+    } else if (!state.agents.length) {
+      title.textContent = "No agents yet.";
+      line.textContent = "When an agent ends its turn with a question, it comes here as a card.";
+    } else {
+      title.textContent = "All clear.";
+      line.textContent = state.agents.some((a) => a.state === "working") ? "Your agents are back at work." : "No agent is asking you anything.";
+    }
+  }
+
+  function render(next) {
+    state = next;
+    if (state.at) skew = Date.parse(state.at) - Date.now();
+    const found = questions(), keys = new Set(found.map((q) => q.key));
+    for (const key of order) {
+      if (keys.has(key)) continue;
+      const el = cards.get(key);
+      el.dataset.pos = "gone";
+      el.style.zIndex = "20";
+      el.inert = true;
+      cards.delete(key);
+      setTimeout(() => el.remove(), 500);
+    }
+    order = order.filter((key) => keys.has(key));
+    // New cards go behind the pile, so the one being read never moves: what can be answered first, newest first.
+    const fresh = found.filter((q) => !cards.has(q.key))
+      .sort((a, b) => a.rank - b.rank || String(b.at).localeCompare(String(a.at)));
+    for (const q of fresh) {
+      const el = card(q);
+      cards.set(q.key, el);
+      el.dataset.pos = "3";
+      pile.prepend(el);
+      // The conversation just continued here comes first: the person came for it.
+      if (q.agent.id === front) { order.unshift(q.key); front = null; } else order.push(q.key);
+    }
+    layout();
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    const top = cards.get(order[0]);
+    if (!top) return;
+    const layer = top.querySelector(".dk-layer"), free = top.querySelector(".dk-free");
+    if (layer && !layer.classList.contains("out")) closeLayer(top);
+    else if (free && !free.hidden) {
+      [...top.querySelector(".dk-opts").children].forEach((c) => { c.hidden = c === free; });
+      focusTop();
+    }
+  });
+
+  setInterval(() => {
+    if (!document.hidden) cards.forEach((el) => { el.querySelector("small").textContent = ago(el.q.at); });
+  }, 20000);
+
+  const load = () => something.state().then(render, (error) => {
+    const [title, line] = done.children;
+    title.textContent = "No agents here.";
+    line.textContent = error.message;
+    count.textContent = "Nothing waiting";
+    done.style.opacity = "1";
+  });
+  something.on("change", render);
+  something.on("granted", load);
+  load();
+</script>
+</body>
+</html>

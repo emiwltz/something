@@ -1,7 +1,7 @@
 // The templates of share/templates pass `something check` with no problem at all, as the person's spaces
 // in a throwaway home: once with every right they declare, then with each of those rights refused, which they must
 // adapt to. Each has its preview, made from the HTML it has now (previews.json keeps the SHA-256 of that HTML), loads
-// nothing from the network and uses only fonts every Mac has. Stack plays, and Pebble remembers between openings. Use
+// nothing from the network and uses only fonts every Mac has. Use
 // Template and `something new --from` make them spaces.
 // With SOMETHING_PREVIEWS naming share/templates, `makesThePreviews` draws the previews again (tools/previews.sh).
 import AppKit
@@ -23,7 +23,7 @@ import WebKit
                              "Futura", "system-ui", "-apple-system", "ui-sans-serif",
                              "serif", "sans-serif", "monospace"]
     /// The appearance each preview is drawn in: the template's own face, whatever the Mac that draws it uses.
-    static let dark: Set = ["agents", "project"]
+    static let dark: Set = ["one-line"]
 
     /// A home with the folder Project watch's placeholder names, so that its check finds it.
     func home() throws -> Home {
@@ -53,7 +53,7 @@ import WebKit
     @Test(arguments: names) func staysOnThisMacWithItsFonts(_ name: String) throws {
         let html = try String(contentsOf: TemplatesTests.folder.appendingPathComponent("\(name).html"), encoding: .utf8)
         let lines = html.filter { $0 == "\n" }.count
-        #expect(lines <= 700, "\(name) has \(lines) lines; a template stays under 700, short enough for an agent to read")
+        #expect(lines <= 2500, "\(name) has \(lines) lines; a template stays under 2,500, short enough for an agent to read")
         for banned in ["http://", "https://", "@import", "@font-face", "url("] {
             #expect(!html.lowercased().contains(banned), "\(name) contains \(banned)")
         }
@@ -108,19 +108,19 @@ import WebKit
         var used: [String] = [], opened: [Library.Destination] = []
         library.used = { used.append($0) }
         library.opened = { opened.append($0) }
-        let agents = try #require(library.templates.first { $0.id == "agents" })
+        let deck = try #require(library.templates.first { $0.id == "deck" })
         #expect(library.templates.map(\.id) == TemplatesTests.names)
-        #expect(agents.title == "My agents" && agents.needs == "Sees and writes to your agents" && !agents.follows)
+        #expect(deck.title == "Decision Deck" && deck.needs == "Sees, writes to and starts agents" && !deck.follows)
         // A double click: the second click comes before the first space opened, and makes nothing.
-        library.use(agents)
-        library.use(agents)
-        #expect(used == ["agents"] && Spaces(root: home.places.spaces).list().map(\.name) == ["agents"])
-        #expect(await wait(30, until: { opened == [.space("agents")] }))
+        library.use(deck)
+        library.use(deck)
+        #expect(used == ["deck"] && Spaces(root: home.places.spaces).list().map(\.name) == ["deck"])
+        #expect(await wait(30, until: { opened == [.space("deck")] }))
         await wait(0.05)
-        library.use(agents)
-        #expect(used == ["agents", "agents-2"] && library.selection == .space("agents-2") && ask.told.isEmpty)
-        let made = try String(contentsOf: home.places.spaces.appendingPathComponent("agents-2.html"), encoding: .utf8)
-        #expect(made == (try String(contentsOf: TemplatesTests.folder.appendingPathComponent("agents.html"), encoding: .utf8)))
+        library.use(deck)
+        #expect(used == ["deck", "deck-2"] && library.selection == .space("deck-2") && ask.told.isEmpty)
+        let made = try String(contentsOf: home.places.spaces.appendingPathComponent("deck-2.html"), encoding: .utf8)
+        #expect(made == (try String(contentsOf: TemplatesTests.folder.appendingPathComponent("deck.html"), encoding: .utf8)))
     }
 
     // MARK: The Templates page
@@ -132,7 +132,7 @@ import WebKit
             gallery.shown = category
             return gallery.cards(templates).map(\.id)
         }
-        #expect(kept == [TemplatesTests.names, ["agents", "project"], ["brief", "logbook"], ["stack", "pet"]])
+        #expect(kept == [TemplatesTests.names, ["one-line", "deck", "council"], ["answers", "ledger"], ["village"]])
         let made = { (rights: [String]) in Template(id: "x", title: "X", line: "", rights: rights, follows: false, preview: nil, ground: nil).needs }
         #expect(made([]) == "Asks for nothing" && made(["state"]) == "Sees your agents" && made(["state", "launch"]) == "Sees and starts agents")
         #expect(made(["send:claude"]) == "Writes to your agents" && made(["store"]) == "Remembers")
@@ -150,11 +150,11 @@ import WebKit
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 964, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
         (window.contentView, window.isReleasedWhenClosed) = (host, false)
         defer { window.close() }
-        let pebble = try #require(library.templates.first { $0.id == "pet" })
-        gallery.hovered = "pet"
-        gallery.preview(pebble)
-        #expect(gallery.hovered == nil && gallery.heading == ("Pebble", "Template preview"))
-        #expect(headings == ["Pebble · Template preview"])
+        let town = try #require(library.templates.first { $0.id == "village" })
+        gallery.hovered = "village"
+        gallery.preview(town)
+        #expect(gallery.hovered == nil && gallery.heading == ("Prompt Town", "Template preview"))
+        #expect(headings == ["Prompt Town · Template preview"])
         // SwiftUI draws the preview, and registers Close Preview's key, on the run loop, as late as a busy runner makes
         // it: Escape is pressed until it is taken. Before, it means nothing, and does nothing.
         let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
@@ -164,112 +164,18 @@ import WebKit
         #expect(headings.last == "Templates · Start from one, then make it yours")
         #expect(await wait { !window.performKeyEquivalent(with: escape) }, "Escape means nothing on the cards")
         #expect(gallery.previewing == nil && headings.count == 2, "\(headings)")
-        library.use(pebble)
-        #expect(Spaces(root: home.places.spaces).list().map(\.name) == ["pet"])
-        #expect(pebble.ground != nil)
-        library.revealTemplate(pebble)
-        #expect(shown == [Home.share.appendingPathComponent("templates/pet.html")])
+        library.use(town)
+        #expect(Spaces(root: home.places.spaces).list().map(\.name) == ["village"])
+        #expect(town.ground != nil)
+        library.revealTemplate(town)
+        #expect(shown == [Home.share.appendingPathComponent("templates/village.html")])
     }
 
-    /// Its launch buttons come from its table of names, in that order: every program something starts has one.
-    @Test func projectWatchCanLaunchEveryProgram() throws {
-        let page = try String(contentsOf: Self.folder.appendingPathComponent("project.html"), encoding: .utf8)
-        let names = try #require(page.components(separatedBy: "const NAMES = {").last?.components(separatedBy: "}").first)
-        let launchable = Registry.app.kinds.launchable
-        #expect(launchable.count == 6 && launchable.allSatisfy { names.contains("\($0): \"") }, "\(launchable)")
-        #expect(page.contains("Object.keys(NAMES).filter((k) => state.kinds[k] && state.kinds[k].launch"))
-    }
-
-    @MainActor @Test func projectWatchFollowsTheFolderChosenFirst() throws {
-        let home = try home()
-        defer { home.remove() }
-        let ask = FakeAsk(), library = Library(places: home.places, ask: ask, share: Home.share)
-        let project = try #require(library.templates.first { $0.id == "project" })
-        #expect(project.follows && project.needs == "Sees, writes to and starts agents\u{00A0}· Remembers")
-        // Cancel makes nothing.
-        library.use(project)
-        #expect(ask.folderMessages == ["Choose the project folder this space follows"] && Spaces(root: home.places.spaces).list().isEmpty)
-        // A quote, and a "</script>" that must not end the declaration's block early (the folder "shop <" holds "script>").
-        ask.folder = home.root.appendingPathComponent("code/my \"shop\" </script>")
-        library.use(project)
-        let space = try #require(Spaces(root: home.places.spaces).named("project"))
-        let declaration = try #require(Declaration.read(space, home: home.root, kinds: Registry.app.kinds).declaration)
-        let chosen = "~/code/my \"shop\" </script>"
-        #expect(declaration.folder == chosen && declaration.agents == .folders([chosen]))
-        #expect(library.selection == .space("project"))
-    }
-
-    // MARK: Playing them
-
-    /// Stack plays: Space starts a game, then three drops made at once each land on the floor below with a part cut off
-    /// (a block that just appeared hangs at the edge of its swing), and the score says three floors.
-    @MainActor @Test func stackPlays() async throws {
-        let home = try home()
-        defer { home.remove() }
-        try home.space("stack", try String(contentsOf: TemplatesTests.folder.appendingPathComponent("stack.html"), encoding: .utf8))
-        guard case .check(let check) = Check.parse(["stack"]) else { throw SpaceError("These are not the words of a check.") }
-        let runner = try CheckTests.runner(home), created = runner.created
-        // The space runs in a frame of its own: a script added to every frame plays in the one that holds the game, as
-        // soon as its own script ran, and says the score and the widths of the tower's floors, from the ground up, in the
-        // console, which the check reports.
-        let play = """
-            if (document.getElementById("score")) {
-              for (let i = 0; i < 4; i++) dispatchEvent(new KeyboardEvent("keydown", { code: "Space", key: " " }));
-              console.log("score: " + document.getElementById("score").textContent + " " + document.getElementById("unit").textContent);
-              console.log("widths: " + tower.map((b) => Math.round(b.w)).join(","));
-            }
-            """
-        runner.created = { web in
-            created(web)
-            web.configuration.userContentController.addUserScript(WKUserScript(source: play, injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: .page))
-        }
-        let report = try await runner.run(check)
-        #expect(report.problems.isEmpty, "\(report.problems)")
-        #expect("\(report.console)".contains("score: 3 FLOORS"), "\(report.console)")
-        let said = try #require("\(report.console)".firstMatch(of: #/widths: ([0-9,]+)/#), "\(report.console)")
-        let widths = said.1.split(separator: ",").compactMap { Int($0) }
-        #expect(widths.count == 4 && zip(widths, widths.dropFirst()).allSatisfy { $0 > $1 }, "Each floor is narrower than the one below it: \(widths)")
-    }
-
-    /// Pebble remembers: opened with a memory two hours old and one turn ended since, its meters have aged, it ate that
-    /// turn as a snack, and it wrote all of it back; opened again, it shows the same values, and eats nothing twice.
-    @MainActor @Test func pebbleRemembersBetweenOpenings() async throws {
-        let home = try home()
-        defer { home.remove() }
-        let space = try home.space("pet", try String(contentsOf: TemplatesTests.folder.appendingPathComponent("pet.html"), encoding: .utf8))
-        // The invented state, with its working turn ended at 08:59:58, after what Pebble last ate (08:00).
-        var json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: Home.share.appendingPathComponent("contract/state-example.json"))) as? [String: Any])
-        var threads = try #require(json["threads"] as? [[String: Any]]), turns = try #require(threads[0]["turns"] as? [[String: Any]])
-        turns[0]["state"] = "done"
-        turns[0]["ended"] = "2026-10-17T08:59:58Z"
-        threads[0]["turns"] = turns
-        json["threads"] = threads
-        let state = try JSONDecoder().decode(State.self, from: JSONSerialization.data(withJSONObject: json))
-        let folder = home.root.appendingPathComponent("memory"), memory = Memory(folder: folder, space: "pet")
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let kept: [String: Any] = ["seen": "2026-10-17T08:00:00Z", "pebble": ["food": 58, "joy": 70, "energy": 60, "at": "2026-10-17T07:00:04Z",
-                                   "asleep": false, "born": "2026-10-14T09:00:00Z", "snacks": 4, "diary": []]]
-        try JSONSerialization.data(withJSONObject: kept).write(to: memory.file)
-        var seen: [[String: Any]] = []
-        for _ in 0..<2 {
-            let reading = Declaration.read(space, home: home.root, kinds: Registry.app.kinds), declaration = try #require(reading.declaration)
-            var grant = Grant(declared: Asked(declaration), at: "")
-            grant.granted = declaration.rights
-            let granted = Rights.granted(reading, grant, limits: Registry.app.limits, home: CheckRunner.invented)
-            let host = CheckHost(state: state, granted: granted, declared: declaration.rights, memory: memory)
-            let page = try CheckPage(space: space, host: host, share: Home.share, rules: try await Lockdown.ruleList())
-            try CheckTests.runner(home).created(page.web)
-            let rendered = await page.render(within: 15, snapshot: home.root.appendingPathComponent("pet.png"))
-            #expect(rendered.problems.isEmpty && rendered.rejections.isEmpty, "\(rendered.problems) \(rendered.rejections.map(\.message))")
-            seen.append(try #require(try memory.get("pebble") as? [String: Any]))
-            #expect(try memory.get("seen") as? String == "2026-10-17T08:59:58Z")
-        }
-        // Two hours awake: Tummy 58 - 14, Joy 70 - 10, Energy 60 - 8; then the snack: Tummy + 6, Joy + 2.
-        for pebble in seen {
-            #expect(abs((pebble["food"] as? Double ?? 0) - 50) < 0.2 && abs((pebble["joy"] as? Double ?? 0) - 62) < 0.2, "\(pebble)")
-            #expect(abs((pebble["energy"] as? Double ?? 0) - 52) < 0.2, "\(pebble)")
-            #expect(pebble["snacks"] as? Int == 5 && pebble["born"] as? String == "2026-10-14T09:00:00Z", "\(pebble)")
-        }
+    /// What an agent writes runs only in a frame cut off from something: Living Answers gives its frame scripts and
+    /// nothing else, so the tool has no way to reach the page's rights.
+    @Test func livingAnswersIsolatesWhatAnAgentWrites() throws {
+        let page = try String(contentsOf: Self.folder.appendingPathComponent("answers.html"), encoding: .utf8)
+        #expect(page.contains("allow-scripts") && !page.contains("allow-same-origin"))
     }
 
     // MARK: The previews

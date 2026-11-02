@@ -28,9 +28,9 @@ folder only.
 ## Make a space
 1. Use the name a line gives you, else pick a short one yourself (lowercase, digits, `-`); do not ask.
 2. Start from the closest template when one fits: `something new <name> --from <template>`; otherwise
-   `something new <name>`. Templates: agents (who works, who waits), project (one folder's progress; write the
-   project's folder in place of its placeholder `~/code/your-project`), brief (a morning paper), logbook (notes and
-   agent events by day), stack (a one-key game), pet (a creature that lives with the agents).
+   `something new <name>`. Templates: one-line (all your agents in one sentence), deck (their questions as cards),
+   council (one question, three agents side by side), answers (an agent answers with a small tool), ledger (who
+   decided what), village (your agents as villagers in a small drawn town).
 3. Give the page a `title` and a one-sentence `description`. Make a first version quickly, then `something check <name>`.
    The person may watch the build or work elsewhere: something opens it on New Space if the person is following
    that build or has left the page empty; otherwise it tells them it is ready, with Open. Never run `something open`.

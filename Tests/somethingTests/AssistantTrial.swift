@@ -195,7 +195,7 @@ struct AssistantTrial {
         try await trial.run {
             let (engine, places, library, model, ask) = (trial.engine, trial.places, trial.library, trial.model, trial.ask)
             library.used = { model.fromTemplate = $0 }
-            let template = try #require(Template.all(Home.share).first { $0.id == "pet" && !$0.follows })
+            let template = try #require(Template.all(Home.share).first { $0.id == "village" && !$0.follows })
             library.use(template)
             let space = try #require(Spaces(root: places.spaces).named("pet"))
             let window = try SpaceView(space: space, places: places, engine: engine, ask: ask, share: Home.share,

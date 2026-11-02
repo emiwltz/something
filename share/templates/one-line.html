@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One Line</title>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "One Line",
+  "description": "All your agents in one sentence, and one button for the thing that matters now.",
+  "agents": { "see": "all" },
+  "rights": ["state", "send", "launch"]
+}
+</script>
+<style>
+  [hidden] { display: none !important; }
+  /* Drawn at 640x400, where 1rem is 16px: the whole page grows with the window. */
+  html { font-size: clamp(15px, min(2.5vw, 4vh), 26px); }
+  :root {
+    color-scheme: dark;
+    --display: ui-serif, "New York", Georgia, serif;
+    --ui: -apple-system, system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  body { margin: 0; background: #10131A; color: #F2EFE6; }
+  .ol { box-sizing: border-box; min-height: 100vh; padding: 1.5rem 2.125rem; display: flex; flex-direction: column; }
+  .ol-top { display: flex; justify-content: space-between; gap: 1rem; font: 500 .656rem/1 var(--mono); letter-spacing: .14em; color: #7F8494; }
+  .ol-mid { flex: 1; display: flex; flex-direction: column; justify-content: flex-start; gap: .875rem; padding: 1.875rem 0 1rem; }
+  .ol-line { font: 340 1.8125rem/1.24 var(--display); font-variation-settings: "opsz" 72; letter-spacing: -.01em; max-width: 35rem; margin: 0; overflow-wrap: anywhere; transition: opacity .45s ease, transform .45s ease; }
+  .ol-line.out { opacity: 0; transform: translateY(8px); }
+  .ol-w { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; text-decoration: underline dotted rgba(242,239,230,.45); text-decoration-thickness: 1.5px; text-underline-offset: 6px; }
+  .ol-w:hover, .ol-w.on { text-decoration-color: currentColor; }
+  .ol-w.k { font-weight: 480; color: var(--k); text-decoration-color: color-mix(in srgb, var(--k) 55%, transparent); }
+  .ol-w.m { color: #9A9FAD; }
+  .ol-layer { position: relative; box-sizing: border-box; max-width: 29.375rem; background: #1A1F2A; border: 1px solid rgba(255,255,255,.08); border-radius: .875rem; padding: .75rem .875rem; display: grid; gap: .4375rem; transition: opacity .3s ease, transform .3s ease; }
+  .ol-layer.out { opacity: 0; transform: translateY(-6px); pointer-events: none; }
+  .ol-layer h4 { margin: 0; font: 600 .75rem/1.2 var(--ui); color: #F2EFE6; display: flex; justify-content: space-between; gap: .75rem; overflow-wrap: anywhere; }
+  .ol-layer h4 span { flex: none; font: 500 .625rem/1 var(--mono); color: #7F8494; letter-spacing: .08em; }
+  .ol-facts { margin: 0; padding: 0; list-style: none; display: grid; gap: .1875rem; font: 400 .72rem/1.45 var(--ui); color: #B9BDC8; overflow-wrap: anywhere; }
+  .ol-facts b { color: #F2EFE6; font-weight: 500; }
+  .ol-facts.talk { max-height: 38vh; overflow-y: auto; gap: .375rem; }
+  .ol-facts.talk .tool { font: 400 .66rem/1.4 var(--mono); color: #7F8494; }
+  .ol-acts { display: flex; gap: .375rem; flex-wrap: wrap; }
+  .ol-acts button { font: 600 .6875rem/1 var(--ui); padding: .4375rem .625rem; border-radius: 999px; border: 1px solid rgba(255,255,255,.16); background: transparent; color: #F2EFE6; cursor: pointer; }
+  .ol-acts button.p { background: #F2EFE6; color: #10131A; border-color: #F2EFE6; }
+  .ol-act { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; min-height: 2.25rem; transition: opacity .45s ease; }
+  .ol-act.out { opacity: 0; }
+  .ol-btn { font: 600 .84rem/1 var(--ui); padding: .6875rem 1.0625rem; border-radius: 999px; border: 0; background: #F2EFE6; color: #10131A; cursor: pointer; }
+  .ol-else { font: 500 .75rem/1 var(--ui); color: #8C91A0; background: none; border: 0; cursor: pointer; padding: 0; text-decoration: underline dotted rgba(140,145,160,.6); text-underline-offset: 4px; }
+  .ol-reply { display: flex; gap: .375rem; width: 23.75rem; max-width: 100%; }
+  .ol-reply input { flex: 1; min-width: 0; font: 400 .78rem/1 var(--ui); padding: .5625rem .75rem; border-radius: 999px; border: 1px solid rgba(255,255,255,.16); background: #161A23; color: #F2EFE6; outline: none; }
+  .ol-reply input:focus { border-color: rgba(255,255,255,.4); }
+  .ol-note { font: 400 .78rem/1.3 var(--ui); color: #9FE3C6; }
+  .ol-note.bad { color: #F07A6E; }
+  .ol-wait { width: 10px; height: 10px; border-radius: 50%; background: #F2B544; animation: ol-ping 1.6s ease-out infinite; }
+  @keyframes ol-ping { 0% { transform: scale(1); opacity: 1; } 70% { transform: scale(1.9); opacity: .2; } 100% { transform: scale(1); opacity: 1; } }
+  /* The right side stays free for the assistant's sticker. */
+  .ol-team { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; padding-right: 76px; }
+  .ol-team span { display: inline-flex; align-items: center; gap: .375rem; font: 500 .6875rem/1 var(--ui); color: #A7ABB8; padding: .375rem .5625rem; border-radius: 999px; background: rgba(255,255,255,.05); }
+  .ol-team i { width: 7px; height: 7px; border-radius: 50%; background: var(--k); }
+  .ol-team i.work { animation: ol-breathe 1.8s ease-in-out infinite; }
+  .ol-team i.wait { background: #F2B544; }
+  .ol-team i.err { background: #F07A6E; }
+  .ol-team i.done { background: transparent; box-shadow: inset 0 0 0 1.5px var(--k); }
+  .ol-team i.rest { background: transparent; box-shadow: inset 0 0 0 1.5px #5F6474; }
+  @keyframes ol-breathe { 50% { opacity: .35; transform: scale(.8); } }
+  .ol-hint { font: 500 .625rem/1 var(--mono); color: #5F6474; letter-spacing: .04em; }
+  @media (max-width: 480px) { .ol-hint { display: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .ol-line, .ol-layer, .ol-act { transition: none; }
+    .ol-wait, .ol-team i.work { animation: none; }
+  }
+</style>
+</head>
+<body>
+<main class="ol">
+  <div class="ol-top"><span>ONE LINE</span><span class="ol-hint">dotted words open what they name</span><span id="clock"></span></div>
+  <div class="ol-mid">
+    <p class="ol-line" id="line" aria-live="polite"></p>
+    <div class="ol-layer out" id="layer" aria-live="polite" hidden></div>
+    <div class="ol-act" id="act"></div>
+    <!-- Outside what is redrawn: a change that arrives while the person types keeps their text. -->
+    <form class="ol-reply" id="reply" hidden>
+      <input id="words" type="text" aria-label="Your words" autocomplete="off">
+      <button class="ol-btn" type="submit">Send</button>
+    </form>
+  </div>
+  <div class="ol-team" id="team"></div>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP", amp: "Amp", antigravity: "Antigravity", cursor: "Cursor" };
+  const COLORS = { claude: "#E8A07A", codex: "#8FBDF2", opencode: "#9FE3C6", pi: "#C9B0F2", omp: "#F2AECB", amp: "#7AD6D9", antigravity: "#C4D67A", cursor: "#D2D5DC" };
+  const TEAM_MAX = 6;
+  const RECENT = 30 * 60e3; // How long a finished or failed turn stays worth a sentence.
+  const WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
+  const EDITS = /^(edit|write|multiedit|notebookedit|apply_patch|patch)/i;
+
+  const label = (kind) => NAMES[kind] || "other agent";
+  const Label = (kind) => label(kind).replace(/^./, (c) => c.toUpperCase());
+  const color = (kind) => COLORS[kind] || "#9A9FAD";
+  const count = (n) => WORDS[n] || String(n);
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const esc = (text) => String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const clip = (text, size) => { const one = String(text).trim().split("\n")[0]; return one.length > size ? one.slice(0, size - 1).trimEnd() + "…" : one; };
+  const base = (folder) => folder ? folder.split("/").filter(Boolean).pop() || folder : null;
+  const tilde = (folder) => folder.replace(/^\/Users\/[^/]+/, "~");
+  const where = (a) => base(a.folder) || a.name || "unknown";
+  const has = (right, kind) => something.granted.rights.some((r) => r === right || r === right + ":" + kind);
+  const canReply = (a) => a.can.send && has("send", a.kind);
+  const canResume = (a) => a.can.resume && a.thread && has("launch", a.kind);
+  const stamp = (iso) => iso ? new Date(iso).getTime() : null;
+  const clock = (iso) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  function ago(iso) {
+    const minutes = Math.round((Date.now() - stamp(iso)) / 60e3);
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return plural(minutes, "minute") + " ago";
+    return plural(Math.round(minutes / 60), "hour") + " ago";
+  }
+  const span = (from, to) => { const m = Math.max(1, Math.round((stamp(to) - stamp(from)) / 60e3)); return plural(m, "minute"); };
+
+  // The state, read for one agent.
+  const threadOf = (s, a) => s.threads.find((t) => t.id === a.thread) || null;
+  const lastTurn = (s, a) => { const t = threadOf(s, a); return t && t.turns.length ? t.turns[t.turns.length - 1] : null; };
+  const requestOf = (s, a) => s.requests.find((r) => r.agent === a.id) || null;
+  function task(s, a) {
+    const thread = threadOf(s, a);
+    const turn = lastTurn(s, a);
+    const asked = turn && turn.items.find((i) => i.kind === "message" && i.author === "person");
+    if (asked && asked.text.trim()) return clip(asked.text, 56);
+    if (thread && thread.title && thread.title !== base(a.folder)) return clip(thread.title, 56);
+    return null;
+  }
+  const tools = (turn) => turn ? turn.items.filter((i) => i.kind === "tool") : [];
+  const edited = (turn) => [...new Set(tools(turn).filter((i) => i.tool && EDITS.test(i.tool.name) && i.text).map((i) => base(i.text.trim().split(/\s/)[0])))];
+  function doing(s, a) {
+    const steps = tools(lastTurn(s, a));
+    const step = steps[steps.length - 1];
+    return step ? `${step.tool ? step.tool.name + " " : ""}<b>${esc(clip(step.text || "", 40))}</b>` : "unknown step";
+  }
+  function lastWords(s, a) {
+    const turn = lastTurn(s, a);
+    const said = turn ? turn.items.filter((i) => i.kind === "message" && i.author === "agent" && i.text.trim()) : [];
+    return said.length ? clip(said[said.length - 1].text, 110) : null;
+  }
+  // When an agent's turn ended, and whether that ending is still news.
+  function ended(s, a, now) {
+    const turn = lastTurn(s, a);
+    const at = turn && turn.ended ? turn.ended : a.updated;
+    if (!at || now - stamp(at) > RECENT) return null;
+    if (a.state === "error") return { how: "error", at };
+    if (a.state === "interrupted") return { how: "interrupted", at };
+    if (a.state === "done" || (a.state === "idle" && turn && turn.state === "done")) return { how: "done", at };
+    return null;
+  }
+
+  // The rules, in order: who waits, who failed, who finished, who works, who rests. Each gives the sentence, its doors
+  // (dotted words) and the one action. Nothing here asks a model: same state, same sentence.
+  const word = (id, text, cls, kind) => `<button type="button" class="ol-w ${cls || ""}" data-door="${id}" aria-expanded="false"${kind ? ` style="--k:${color(kind)}"` : ""}>${esc(text)}</button>`;
+  const inFolder = (a) => a.folder ? ` in ${word("folder", base(a.folder))}` : "";
+  const named = (a) => word("agent", Label(a.kind), "k", a.kind);
+
+  function sentence(s, now) {
+    const live = s.agents.filter((a) => a.alive !== false);
+    const waiting = s.agents.filter((a) => a.state === "waiting" || requestOf(s, a))
+      .sort((x, y) => stamp((requestOf(s, x) || x).at || x.updated) - stamp((requestOf(s, y) || y).at || y.updated));
+    if (waiting.length) return waitSentence(s, waiting);
+    const news = s.agents.map((a) => ({ a, end: ended(s, a, now) })).filter((n) => n.end)
+      .sort((x, y) => (x.end.how === "error" ? 0 : 1) - (y.end.how === "error" ? 0 : 1) || stamp(y.end.at) - stamp(x.end.at));
+    if (news.length) return newsSentence(s, news[0].a, news[0].end);
+    return calmSentence(s, live);
+  }
+
+  function waitSentence(s, waiting) {
+    const a = waiting[0];
+    const req = requestOf(s, a);
+    const more = waiting.length - 1;
+    const moreText = more ? " " + word("others", `${count(more)} more ${more === 1 ? "waits" : "wait"}.`, "m") : "";
+    let what;
+    if (!req) what = `${named(a)} waits for you${inFolder(a)}. Answer where it runs.`;
+    else {
+      const about = req.about ? word("request", clip(req.about, 60), "m") : null;
+      const ask = req.kind === "question"
+        ? (about ? `it asks: ${about}.` : `it has ${word("request", "a question", "m")}.`)
+        : req.tool === "Bash" && about ? `it asks to run ${about}.`
+        : about ? `it asks to use ${esc(req.tool || "a tool")} on ${about}.`
+        : `it asks to use ${word("request", req.tool || "a tool", "m")}.`;
+      what = `${named(a)} waits for you${inFolder(a)}: ${ask} Answer in something's window.`;
+    }
+    return { key: "wait:" + a.id, line: what + moreText, a, wait: true, reply: canReply(a), doors: { agent: a, folder: a, request: a, others: a, talk: a }, tag: "WAITING", waiting };
+  }
+
+  function newsSentence(s, a, end) {
+    const name = task(s, a);
+    const when = word("when", ago(end.at) + ".", "m");
+    const title = name ? word("task", `“${name}”`) : null;
+    let what;
+    if (end.how === "error") {
+      const why = a.error ? `: ${word("error", clip(a.error.message, 70), "m")}` : "";
+      what = `${named(a)} stopped on an error${inFolder(a)}${why}${why ? "" : "."}`;
+    } else if (end.how === "interrupted") what = `${named(a)} was interrupted${title ? ` during ${title}` : ""}${inFolder(a)}, ${when}`;
+    else what = `${named(a)} finished${title ? ` ${title}` : ""}${inFolder(a)}, ${when}`;
+    const button = canResume(a) ? "Continue it here" : null;
+    const reply = canReply(a);
+    return { key: "news:" + a.id, line: what, a, end, button, write: !button && reply, doors: { agent: a, folder: a, task: a, when: a, error: a, talk: a },
+      tag: end.how === "error" ? "ERROR" : end.how === "interrupted" ? "INTERRUPTED" : "DONE" };
+  }
+
+  function calmSentence(s, live) {
+    const working = live.filter((a) => a.state === "working");
+    const unknown = live.filter((a) => a.state === "unknown");
+    const resting = live.filter((a) => a.state === "idle");
+    const calm = word("calm", unknown.length ? "Nothing needs you, as far as something can see." : "Nothing needs you.", "m");
+    let what;
+    if (working.length === 1 && !unknown.length) what = `${named(working[0])} is working${inFolder(working[0])}. ${calm}`;
+    else if (working.length) what = `${count(working.length)} ${working.length === 1 ? "agent is" : "agents are"} working. ${calm}`;
+    else if (resting.length === 1 && !unknown.length) what = `${named(resting[0])} rests${inFolder(resting[0])}. ${calm}`;
+    else if (resting.length) what = `${count(resting.length)} ${resting.length === 1 ? "agent rests" : "agents rest"}. ${calm}`;
+    else if (unknown.length) what = `${count(unknown.length)} ${unknown.length === 1 ? "agent is" : "agents are"} here, doing something unknown. ${calm}`;
+    else return null;
+    const a = working.length === 1 ? working[0] : resting.length === 1 && !working.length ? resting[0] : null;
+    return { key: "calm", line: what, a, live, doors: { calm: null, agent: a, folder: a, talk: a }, tag: a && a.state === "working" ? "WORKING" : "IDLE" };
+  }
+
+  // The doors: what each dotted word opens.
+  function factsOf(s, a, m) {
+    const turn = lastTurn(s, a);
+    const req = requestOf(s, a);
+    const name = task(s, a);
+    const facts = [];
+    if (req) facts.push(`Asked <b>${ago(req.at)}</b>${name ? `, in the middle of “${esc(name)}”` : ""}`);
+    else if (name) facts.push(`Last asked: “${esc(name)}”`);
+    const steps = tools(turn).length, files = edited(turn);
+    if (turn && steps) facts.push(`This turn: ${plural(steps, "step")}${files.length ? `, edited <b>${esc(files.slice(0, 3).join(", "))}</b>` : ""}`);
+    const mode = a.mode && (a.options.mode || []).find((o) => o.value === a.mode);
+    const set = [mode ? mode.label : a.mode, a.effort && "effort " + a.effort].filter(Boolean);
+    if (set.length) facts.push(`${a.mode ? "Mode" : "Set to"}: <b>${esc(set.join(" · "))}</b>`);
+    if (a.queue.length) facts.push(`${plural(a.queue.length, "message")} held for its next turn`);
+    if (a.state === "working" && steps) facts.push("Now: " + doing(s, a));
+    const words = lastWords(s, a);
+    if (words && a.state !== "working") facts.push(`Last words: <b>“${esc(words)}”</b>`);
+    if (a.error) facts.push(esc(a.error.message));
+    if (a.origin === "elsewhere" && !a.can.send) facts.push(esc(a.because.send || "Started elsewhere: something only reads it."));
+    else if (!a.can.send && a.because.send) facts.push(esc(a.because.send));
+    else if (a.can.send && !has("send", a.kind)) facts.push(`This space may not talk to ${esc(label(a.kind))}.`);
+    if (a.can.resume && !has("launch", a.kind)) facts.push(`This space may not start ${esc(label(a.kind))}, so it cannot continue it here.`);
+    return facts.length ? facts : ["Nothing more is known"];
+  }
+  function agentDoor(s, m, a) {
+    const acts = [];
+    if (threadOf(s, a)) acts.push(["talk", "Open conversation"]);
+    if (canResume(a)) acts.push(["resume", "Continue it here"]);
+    if (a.can.interrupt && has("send", a.kind) && (a.state === "working" || a.state === "waiting")) acts.push(["stop", "Stop this turn"]);
+    return { t: `${Label(a.kind)} · ${where(a)}`, tag: a.state.toUpperCase(), f: factsOf(s, a, m), a: acts };
+  }
+  const stateText = (a, s) => requestOf(s, a) ? "waiting" : a.state;
+  function folderDoor(s, a) {
+    const here = s.agents.filter((b) => b.folder === a.folder && b.alive !== false);
+    const f = [here.length ? `<b>${plural(here.length, "agent")}</b> here: ${esc(here.map((b) => `${label(b.kind)} (${stateText(b, s)})`).join(", "))}` : "Nobody works here now"];
+    const latest = here.concat(a).map((b) => b.updated).filter(Boolean).sort().pop();
+    const files = edited(lastTurn(s, a));
+    if (files.length) f.push(`Last change: <b>${esc(files[files.length - 1])}</b>`);
+    if (latest) f.push(`Last activity: ${ago(latest)}`);
+    return { t: tilde(a.folder), tag: "FOLDER", f, a: [] };
+  }
+  function requestDoor(s, a) {
+    const req = requestOf(s, a);
+    if (!req) return null;
+    const name = task(s, a);
+    const f = [];
+    if (req.tool) f.push(`Through <b>${esc(req.tool)}</b>, asked ${ago(req.at)}`);
+    if (name) f.push(`${esc(Label(a.kind))} is working on “${esc(name)}”`);
+    f.push("Only you can answer it, in something's window");
+    return { t: req.about ? clip(req.about, 70) : req.tool || "A request", tag: req.kind === "question" ? "THE QUESTION" : "THE COMMAND", f, a: [] };
+  }
+  function taskDoor(s, a) {
+    const turn = lastTurn(s, a);
+    const steps = tools(turn), files = edited(turn);
+    const f = [];
+    if (turn && turn.ended) f.push(`<b>${plural(steps.length, "step")}</b> in ${span(turn.started, turn.ended)}`);
+    if (files.length) f.push(`Changed ${files.slice(0, 4).map((x) => `<b>${esc(x)}</b>`).join(" and ")}`);
+    const words = lastWords(s, a);
+    if (words) f.push(`Last words: <b>“${esc(words)}”</b>`);
+    return { t: task(s, a) || "This task", tag: "THE TASK", f: f.length ? f : ["Nothing more is known"], a: threadOf(s, a) ? [["talk", "Open conversation"]] : [] };
+  }
+  function whenDoor(s, m) {
+    const quiet = !s.requests.some((r) => r.agent === m.a.id);
+    return { t: clock(m.end.at), tag: m.tag === "DONE" ? "FINISHED" : m.tag, f: [m.tag === "DONE" ? "The turn ended normally" : "The turn did not reach its end", quiet ? "Nothing waits for you in it" : "It still waits for you"], a: [] };
+  }
+  function errorDoor(m) {
+    const e = m.a.error;
+    return { t: `${Label(m.a.kind)} · ${where(m.a)}`, tag: "THE ERROR", f: e ? [esc(e.message), `Code: <b>${esc(e.code)}</b>`] : ["The agent gave no reason"], a: [] };
+  }
+  function calmDoor(s, m) {
+    const f = m.live.slice(0, 5).map((a) => {
+      const place = a.folder ? ` in ${esc(base(a.folder))}` : "";
+      if (a.state === "working") return `${esc(Label(a.kind))}: ${doing(s, a)}${place}`;
+      return `${esc(Label(a.kind))} is ${a.state === "idle" ? "resting" : "unknown"}${place}`;
+    });
+    if (m.live.length > 5) f.push(`And ${m.live.length - 5} more`);
+    f.push(...Object.values(s.kinds).map((k) => k.note).filter(Boolean).map(esc));
+    return { t: "All quiet", tag: "NOW", f, a: [] };
+  }
+  function othersDoor(s, m) {
+    return { t: "Also waiting", tag: "NEXT", f: m.waiting.slice(1).map((a) => {
+      const req = requestOf(s, a);
+      return `${esc(Label(a.kind))} · ${esc(where(a))}${req && req.about ? `: <b>${esc(clip(req.about, 50))}</b>` : ""}`;
+    }), a: [] };
+  }
+  function talkDoor(s, m, a) {
+    const thread = threadOf(s, a);
+    if (!thread) return null;
+    const items = thread.turns.flatMap((t) => t.items).slice(-30);
+    const list = items.filter((i) => i.kind !== "thought").map((i) => {
+      if (i.kind === "message") return `<li><b>${i.author === "person" ? "You" : esc(Label(a.kind))}:</b> ${esc(clip(i.text, 400))}</li>`;
+      return `<li class="tool">${esc(i.tool ? i.tool.name : i.kind)} ${esc(clip(i.text || "", 70))}</li>`;
+    });
+    return { t: thread.title ? clip(thread.title, 60) : `${Label(a.kind)} · ${where(a)}`, tag: "CONVERSATION", f: list.length ? list : ["Nothing was said yet"], talk: true, a: canResume(a) ? [["resume", "Continue it here"]] : [] };
+  }
+  function door(s, m, id) {
+    if (!m || !(id in m.doors)) return null;
+    const a = m.a;
+    if (id === "calm") return calmDoor(s, m);
+    if (!a) return null;
+    if (id === "agent") return agentDoor(s, m, a);
+    if (id === "folder") return a.folder ? folderDoor(s, a) : null;
+    if (id === "request") return requestDoor(s, a);
+    if (id === "task") return taskDoor(s, a);
+    if (id === "when") return whenDoor(s, m);
+    if (id === "error") return errorDoor(m);
+    if (id === "others") return othersDoor(s, m);
+    if (id === "talk") return talkDoor(s, m, a);
+    return null;
+  }
+
+  // What is on screen.
+  let state = null, moment = null, shownKey = null, shownAct = null, open = null, replyTo = null, note = null, swapping = 0, closing = 0;
+
+  function closeLayer() {
+    open = null;
+    const layer = $("layer");
+    layer.classList.add("out");
+    document.querySelectorAll(".ol-w").forEach((b) => { b.classList.remove("on"); b.setAttribute("aria-expanded", "false"); });
+    const mine = ++closing;
+    setTimeout(() => { if (mine === closing) layer.hidden = true; }, 300);
+  }
+  function fillLayer() {
+    const d = door(state, moment, open);
+    if (!d) { closeLayer(); return; }
+    const layer = $("layer");
+    closing++;
+    const facts = layer.querySelector(".ol-facts");
+    const scroll = facts ? facts.scrollTop : 0;
+    const html = `<h4>${esc(d.t)}<span>${esc(d.tag)}</span></h4><ul class="ol-facts${d.talk ? " talk" : ""}">${d.f.map((x) => x.startsWith("<li") ? x : `<li>${x}</li>`).join("")}</ul>` +
+      (d.a.length ? `<div class="ol-acts">${d.a.map(([id, text], i) => `<button type="button" class="${i ? "" : "p"}" data-do="${id}">${esc(text)}</button>`).join("")}</div>` : "");
+    if (layer.dataset.html !== html) {
+      layer.dataset.html = html;
+      layer.innerHTML = html;
+      const list = layer.querySelector(".ol-facts");
+      if (list) list.scrollTop = scroll;
+    }
+    if (layer.hidden) { layer.hidden = false; void layer.offsetWidth; }
+    layer.classList.remove("out");
+    document.querySelectorAll(".ol-w").forEach((b) => {
+      const on = b.dataset.door === open;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-expanded", String(on));
+    });
+  }
+  function drawAct() {
+    const m = moment, act = $("act");
+    const say = note ? `<span class="ol-note${note.bad ? " bad" : ""}">${esc(note.text)}</span>` : "";
+    const key = [m && m.key, m && m.button, m && m.write, m && m.reply, m && m.start, note && note.text, replyTo].join("|");
+    if (key === shownAct) return;
+    shownAct = key;
+    let html = "";
+    if (m && !replyTo) {
+      if (m.button) html += `<button class="ol-btn" type="button" data-do="resume">${esc(m.button)}</button>`;
+      else if (m.write) html += `<button class="ol-btn" type="button" data-do="reply">Write to it</button>`;
+      else if (m.start) html += `<button class="ol-btn" type="button" data-do="launch">Start ${esc(label(m.start))}</button>`;
+      else if (m.wait) html += `<span class="ol-wait"></span>`;
+      if (m.reply) html += `<button type="button" class="ol-else" data-do="reply">Reply something else</button>`;
+    }
+    act.innerHTML = html + say;
+  }
+  function drawTeam(s, now) {
+    const rank = { wait: 0, err: 1, done: 2, work: 3, rest: 4 };
+    const dot = (a) => s.requests.some((r) => r.agent === a.id) || a.state === "waiting" ? "wait"
+      : a.state === "working" ? "work" : a.state === "error" ? "err" : a.state === "done" || a.state === "interrupted" ? "done" : "rest";
+    const shown = s.agents.filter((a) => a.alive !== false || ended(s, a, now)).map((a) => ({ a, d: dot(a) })).sort((x, y) => rank[x.d] - rank[y.d]);
+    const chips = shown.slice(0, TEAM_MAX).map(({ a, d }) =>
+      `<span><i class="${d}" style="--k:${color(a.kind)}"></i>${esc(label(a.kind))} · ${esc(clip(where(a), 24))}</span>`);
+    if (shown.length > TEAM_MAX) chips.push(`<span>+${shown.length - TEAM_MAX}</span>`);
+    const html = chips.join("");
+    if ($("team").dataset.html !== html) { $("team").dataset.html = html; $("team").innerHTML = html; }
+  }
+  // No sentence comes from the agents: say why, and offer the launch this space may make.
+  function emptyMoment(s) {
+    if (!something.granted.rights.includes("state")) return { key: "blind", line: "This space may not see your agents. You can allow it beside this page.", doors: {} };
+    const k = s.kinds.claude;
+    const start = has("launch", "claude") && k && k.launch && k.installed !== false ? "claude" : null;
+    return { key: "empty", line: "No agent is here. Nothing needs you.", start, doors: {} };
+  }
+  function write(next) {
+    $("line").innerHTML = next.line;
+    moment = next;
+    shownKey = next.key;
+    if (open) { if (door(state, moment, open)) fillLayer(); else closeLayer(); }
+    drawAct();
+  }
+  function draw() {
+    if (!state) return;
+    const now = Date.now();
+    const next = sentence(state, now) || emptyMoment(state);
+    drawTeam(state, now);
+    if (replyTo && !state.agents.some((a) => a.id === replyTo)) closeReply();
+    if (next.key === shownKey) {
+      if (!swapping) {
+        // Only a change of subject fades; live numbers change in place, without touching an open door's word.
+        const was = $("line").dataset.html;
+        if (was !== next.line) { $("line").dataset.html = next.line; write(next); }
+        else { moment = next; if (open) fillLayer(); drawAct(); }
+      }
+      return;
+    }
+    if (shownKey === null || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      if (open) closeLayer();
+      note = null;
+      $("line").dataset.html = next.line;
+      write(next);
+      return;
+    }
+    if (swapping) { clearTimeout(swapping); } else { $("line").classList.add("out"); $("act").classList.add("out"); }
+    if (open) closeLayer();
+    swapping = setTimeout(() => {
+      swapping = 0;
+      note = null;
+      const latest = sentence(state, Date.now()) || emptyMoment(state);
+      $("line").dataset.html = latest.line;
+      write(latest);
+      $("line").classList.remove("out");
+      $("act").classList.remove("out");
+    }, 460);
+  }
+
+  function say(text, bad) {
+    const mine = note = { text, bad: !!bad };
+    drawAct();
+    setTimeout(() => { if (note === mine) { note = null; drawAct(); } }, 9000);
+  }
+  function openReply(a) {
+    replyTo = a.id;
+    note = null;
+    $("reply").hidden = false;
+    $("words").placeholder = `Write to ${label(a.kind)} · ${where(a)}…`;
+    drawAct();
+    $("words").focus({ preventScroll: true });
+  }
+  function closeReply() { replyTo = null; $("reply").hidden = true; $("words").value = ""; drawAct(); }
+
+  async function act(what) {
+    const a = moment && moment.a;
+    try {
+      if (what === "reply" && a) openReply(a);
+      if (what === "talk") { open = "talk"; fillLayer(); }
+      if (what === "resume" && a) {
+        await something.resume(a.kind, a.thread);
+        closeLayer();
+        say(`${Label(a.kind)} resumed here. You can write to it now.`);
+      }
+      if (what === "stop" && a) {
+        const { interrupted } = await something.interrupt(a.id);
+        say(interrupted ? `${Label(a.kind)} stopped this turn.` : `${Label(a.kind)} had no turn running.`);
+      }
+      if (what === "launch") {
+        await something.launch(moment.start);
+        say(`${Label(moment.start)} is starting.`);
+      }
+    } catch (error) { say(error.message, true); }
+  }
+
+  document.addEventListener("click", (e) => {
+    const word = e.target.closest(".ol-w");
+    if (word) { if (open === word.dataset.door) closeLayer(); else { open = word.dataset.door; fillLayer(); } return; }
+    const doing = e.target.closest("[data-do]");
+    if (doing) { act(doing.dataset.do); return; }
+    if (open && !e.target.closest(".ol-layer")) closeLayer();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (open) {
+      const word = document.querySelector(`.ol-w[data-door="${open}"]`);
+      closeLayer();
+      if (word) word.focus({ preventScroll: true });
+    } else if (replyTo) closeReply();
+  });
+  $("reply").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = $("words").value.trim();
+    const a = state.agents.find((x) => x.id === replyTo);
+    if (!text || !a) return;
+    try {
+      const { delivery } = await something.send(a.id, text, { when: "next" });
+      const after = a.state === "waiting" ? "It reads it after you answered, when this turn ends."
+        : delivery === "queued" ? "It reads it when this turn ends."
+        : delivery === "started" ? "It starts on it now." : "It reads it during this turn.";
+      closeReply();
+      say(`Sent to ${label(a.kind)}. ${after}`);
+    } catch (error) { say(error.message, true); }
+  });
+
+  function tick() {
+    $("clock").textContent = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    draw();
+  }
+  function take(next) { state = next; draw(); }
+  function fail(error) {
+    if (error.code === "NO_HOST") { $("line").textContent = "Open this space in something to see your agents."; return; }
+    $("line").textContent = error.message;
+  }
+
+  something.on("change", take);
+  something.on("granted", () => { shownAct = null; something.state().then(take, fail); });
+  something.state().then(take, fail);
+  tick();
+  setInterval(tick, 20e3);
+</script>
+</body>
+</html>

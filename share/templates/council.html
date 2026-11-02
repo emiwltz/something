@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Council</title>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "Council",
+  "description": "One hard question, three agents of different families, and their disagreements made visible.",
+  "agents": { "see": "all" },
+  "rights": ["state", "send", "launch", "store"]
+}
+</script>
+<style>
+  [hidden] { display: none !important; }
+  :root {
+    color-scheme: light;
+    --ui: -apple-system, system-ui, sans-serif; --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --display: "New York", ui-serif, Georgia, serif; --voice: "New York", ui-serif, Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: #F4EFE4; color: #24211C; font-family: var(--ui); }
+  .cn { position: relative; height: 100%; min-height: 460px; padding: 22px 26px 18px; display: grid; grid-template-rows: auto 1fr auto; gap: 16px; overflow: hidden; outline: none; }
+
+  .cn-head { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; }
+  .cn-head > div:first-child { flex: 1; min-width: 0; }
+  .cn-head small { display: block; font: 600 10.5px/1 var(--mono); letter-spacing: .16em; color: #8B826F; margin-bottom: 9px; }
+  .cn-q { font: 400 28px/1.2 var(--display); font-variation-settings: "opsz" 48; letter-spacing: -.012em; max-width: 680px; margin: 0; overflow-wrap: anywhere; }
+  textarea.cn-q { display: block; width: 100%; height: 2.5em; padding: 0; resize: none; border: 0; outline: none; background: none; color: inherit; }
+  textarea.cn-q::placeholder { color: #A89E8A; }
+  .cn-meter { width: 220px; flex: none; padding-top: 2px; }
+  .cn-meter > div:first-child { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font: 500 11.5px/1 var(--ui); color: #6E6758; }
+  .cn-meter b { white-space: nowrap; font: 600 12.5px/1 var(--mono); color: #24211C; letter-spacing: -.03em; }
+  .cn-bar { margin-top: 9px; height: 6px; border-radius: 3px; background: #E2DAC8; overflow: hidden; }
+  .cn-bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #6FA06A, #3F8A54); transform-origin: 0 50%; transform: scaleX(0); transition: transform 1.1s cubic-bezier(.3,.7,.2,1); }
+  .cn-status { display: block; margin-top: 8px; font: 500 11px/1.35 var(--ui); color: #8B826F; }
+
+  .cn-cols { display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 12px; min-height: 0; }
+  .cn-col { display: flex; flex-direction: column; min-height: 0; background: #FBF8F1; border: 1px solid #E3DBCB; border-radius: 12px; padding: 14px 16px 11px; }
+  .cn-col.soon { background: none; border-style: dashed; }
+  .cn-who { display: flex; justify-content: space-between; align-items: center; gap: 8px; font: 600 13px/1 var(--ui); padding-bottom: 10px; border-bottom: 1px solid #ECE5D6; margin-bottom: 10px; }
+  .cn-who span { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .cn-who span::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--k); }
+  .cn-who small { font: 500 11px/1 var(--ui); color: #9A917E; text-align: right; }
+  .cn-txt { flex: 1; min-height: 0; overflow-y: auto; font: 400 15px/1.5 var(--voice); color: #3A362E; margin: 0; overflow-wrap: anywhere; animation: rise .4s ease; }
+  .soon .cn-txt, .cn-txt.quiet { color: #9A917E; font: 400 13px/1.45 var(--ui); }
+  .cn-txt.bad { color: #A4522A; font: 400 13px/1.45 var(--ui); }
+  .cn-txt mark { color: inherit; padding: 1px 2px; border-radius: 3px; }
+  .cn-txt mark.y { background: rgba(111,173,104,.26); }
+  .cn-txt mark.n { background: rgba(232,166,52,.30); }
+  @keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+  .cn-end { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 24px; margin-top: 8px; }
+  .cn-why { font: 500 12px/1 var(--ui); color: #8B826F; background: none; border: 0; padding: 3px 0; cursor: pointer; border-bottom: 1px dotted #B5AB96; }
+  .cn-why:hover { color: #24211C; }
+  .cn-changed { font: 600 10.5px/1 var(--ui); color: #3F8A54; background: rgba(111,173,104,.16); padding: 4px 7px; border-radius: 999px; white-space: nowrap; animation: rise .4s ease; }
+
+  .cn-chip { position: absolute; top: 0; left: 0; z-index: 3; font: 600 11px/1 var(--ui); padding: 6px 9px; border-radius: 999px; background: #24211C; color: #F4EFE4; white-space: nowrap; display: inline-flex; gap: 5px; align-items: center; opacity: 0; transition: transform 1.2s cubic-bezier(.45,.05,.25,1), opacity .3s ease; pointer-events: none; }
+  .cn-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--k); }
+
+  /* The right end stays clear of the assistant's sticker. */
+  .cn-foot { display: flex; align-items: center; gap: 12px; padding-right: 58px; min-height: 36px; flex-wrap: wrap; }
+  .cn-btn { font: 600 13.5px/1 var(--ui); padding: 11px 16px; border-radius: 999px; border: 0; background: #24211C; color: #F4EFE4; cursor: pointer; transition: background .15s ease, opacity .2s ease; }
+  .cn-btn:hover { background: #3A352D; }
+  .cn-btn[disabled] { opacity: .45; cursor: default; }
+  .cn-ghost { font: 600 13px/1 var(--ui); padding: 10px 14px; border-radius: 999px; border: 1px solid #CFC5B1; background: transparent; color: #3A352D; cursor: pointer; }
+  .cn-ghost:hover { background: #ECE5D6; }
+  .cn-legend { margin-left: auto; display: flex; gap: 12px; font: 500 11.5px/1 var(--ui); color: #6E6758; }
+  .cn-legend span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .cn-legend i { width: 14px; height: 9px; border-radius: 2px; }
+  .cn-note { font: 500 12.5px/1.4 var(--ui); color: #A4522A; margin: 0; flex: 1 1 260px; }
+  :focus-visible { outline: 2px solid #24211C; outline-offset: 2px; }
+  textarea.cn-q:focus-visible { outline: none; }
+
+  .cn-layer { position: absolute; z-index: 6; width: 320px; max-width: calc(100% - 32px); max-height: 62%; overflow-y: auto; padding: 14px 16px 13px; border-radius: 12px; background: #FFFDF8; border: 1px solid #DCD2BF; box-shadow: 0 1px 2px rgba(40,30,10,.06), 0 16px 36px rgba(40,30,10,.16); opacity: 0; transform: translateY(6px); transition: opacity .2s ease, transform .2s ease; pointer-events: none; }
+  .cn-layer.on { opacity: 1; transform: none; pointer-events: auto; }
+  .cn-layer h4 { margin: 0 0 8px; font: 600 13px/1.25 var(--ui); display: flex; align-items: center; gap: 6px; }
+  .cn-layer h4 i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--k); }
+  .cn-layer h4 small { margin-left: auto; font: 500 11px/1 var(--ui); color: #9A917E; white-space: nowrap; }
+  .cn-layer h5 { margin: 11px 0 6px; font: 600 11px/1 var(--ui); color: #8B826F; }
+  .cn-layer ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .cn-layer li { font: 400 13.5px/1.4 var(--voice); color: #3A362E; padding-left: 12px; position: relative; overflow-wrap: anywhere; }
+  .cn-layer li::before { content: ""; position: absolute; left: 0; top: 7px; width: 4px; height: 4px; border-radius: 50%; background: #B5AB96; }
+  .cn-layer li.y::before { background: #4E9A5E; }
+  .cn-layer li.n::before { background: #D9982B; }
+  .cn-layer p { margin: 9px 0 0; font: 500 11px/1.35 var(--ui); color: #8B826F; }
+
+  @media (max-width: 720px) {
+    html, body { height: auto; }
+    .cn { height: auto; overflow: visible; }
+    .cn-head { flex-direction: column; gap: 12px; }
+    .cn-meter { width: 100%; }
+    .cn-cols { grid-template-columns: minmax(0, 1fr); }
+    .cn-col { min-height: 170px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cn-txt, .cn-changed { animation: none; }
+    .cn-bar i, .cn-layer, .cn-chip { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main class="cn" id="root" tabindex="-1">
+  <header class="cn-head">
+    <div>
+      <small>COUNCIL · ROUND <span id="round">1</span></small>
+      <textarea class="cn-q" id="ask" rows="2" aria-label="Your question" placeholder="Should the blog move from WordPress to a static site?"></textarea>
+      <p class="cn-q" id="question" hidden></p>
+    </div>
+    <div class="cn-meter">
+      <div><span>Points</span><b id="points">none yet</b></div>
+      <div class="cn-bar"><i id="bar"></i></div>
+      <span class="cn-status" id="status" role="status">You decide. something does not.</span>
+    </div>
+  </header>
+  <section class="cn-cols" id="cols" aria-label="Answers"></section>
+  <footer class="cn-foot">
+    <button class="cn-btn" id="main" type="button">Ask the council</button>
+    <button class="cn-ghost" id="syn" type="button" hidden>Ask a fourth for a synthesis</button>
+    <button class="cn-ghost" id="fresh" type="button" hidden>New question</button>
+    <p class="cn-note" id="note" role="alert" hidden></p>
+    <div class="cn-legend" id="legend" hidden><span><i style="background:rgba(111,173,104,.4)"></i><span id="legend-y">All three agree</span></span><span><i style="background:rgba(232,166,52,.45)"></i>They differ</span></div>
+  </footer>
+  <div class="cn-layer" id="layer" role="dialog" aria-label="Details"></div>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const element = (tag, properties) => Object.assign(document.createElement(tag), properties);
+  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP", amp: "Amp" };
+  const COLORS = { claude: "#C8693F", codex: "#3F7E6E", opencode: "#5B6BB5", pi: "#A9558F", omp: "#8C7A2E", amp: "#B8433C" };
+  const ORDER = ["claude", "codex", "opencode", "pi", "omp", "amp"];
+  const label = (kind) => NAMES[kind] || "other agent";
+  const has = (right, kind) => something.granted.rights.some((r) => r === right || r === right + ":" + kind);
+  const hasAny = (right) => something.granted.rights.some((r) => r === right || r.startsWith(right + ":"));
+  const list = (names) => names.length < 2 ? names.join("") : names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+
+  // session: the question on the table and its seats. bench: the agents this space started, kept for the next
+  // question, since a space cannot stop an agent. Both are remembered, so a reload loses nothing.
+  let state = null, session = null, bench = [], launching = false, opener = null;
+
+  const remember = () => { if (hasAny("store")) something.store.set("council", { session, bench }).catch(say); };
+  function say(error) { $("note").hidden = !error; $("note").textContent = error ? error.message || String(error) : ""; }
+
+  // --- Who can sit ---------------------------------------------------------------------------------------------
+
+  const agentOf = (id) => state && state.agents.find((a) => a.id === id);
+  const canStart = (k) => { const e = state.kinds[k]; return !!e && e.launch === true && e.installed !== false && has("launch", k); };
+  const seated = () => session ? [...session.seats, session.syn].filter(Boolean).map((s) => s.id) : [];
+  const free = (kind) => bench.find((b) => { const a = agentOf(b.id); return b.kind === kind && a && a.state === "idle" && a.can.send && !seated().includes(b.id); });
+  const kindsReady = () => ORDER.filter((k) => has("send", k) && (canStart(k) || free(k)));
+
+  async function take(kind) {
+    const known = free(kind);
+    const id = known ? known.id : await something.launch(kind);
+    if (!known) { bench.push({ kind, id }); setTimeout(refresh, 31000); }
+    return { kind, id, at: Date.now(), sendMe: null, busy: false, before: [], err: null, last: null };
+  }
+
+  // --- The words sent to the agents ----------------------------------------------------------------------------
+
+  const FORMAT = "Do not change any file and do not run anything: answer from what you know. Reply in plain sentences, no markdown, at most 80 words, in the language of the question. Then write a line holding only WHY: and under it 3 to 5 short lines, each one step of how you reasoned.";
+  const firstRound = (q) => `You sit on a council with agents of other families. Each answers on its own; a person judges. Earlier questions no longer matter.\n\nThe question: ${q}\n\n${FORMAT}`;
+  const answersOf = (seats) => seats.map((s) => `${label(s.kind)} said:\n${s.last.text}`).join("\n\n");
+  const secondRound = (q, others) => `Second round of the council. The question: ${q}\n\nHere is what the others answered.\n\n${answersOf(others)}\n\nKeep your answer or change it, whichever is right; do not agree just to agree. ${FORMAT} Before WHY:, add a line holding only STANCE: kept or STANCE: changed.`;
+  const synthesis = (q, seats) => `A council of agents answered this question: ${q}\n\n${answersOf(seats)}\n\nWrite a synthesis that keeps both sides. Do not decide and add no opinion of your own. Do not change any file and do not run anything. One short line per point, each beginning AGREE: for what all share, or OPEN: for what still divides them, saying who holds what. At most 6 lines, in the language of the question, no markdown.`;
+
+  // --- Reading the answers from the state ----------------------------------------------------------------------
+
+  function threadOf(agent) {
+    return state.threads.find((t) => t.id === agent.thread) || state.threads.find((t) => t.agent === agent.id) || null;
+  }
+
+  function parse(text) {
+    const lines = text.replace(/\*\*/g, "").split("\n");
+    const at = lines.findIndex((l) => /^\W*WHY\W*$/i.test(l));
+    const body = at < 0 ? lines : lines.slice(0, at);
+    const stance = (body.join("\n").match(/^\W*STANCE:\s*(kept|changed)\W*$/im) || [])[1] || null;
+    return {
+      text: body.filter((l) => !/^\W*STANCE:/i.test(l)).join("\n").trim(),
+      why: at < 0 ? [] : lines.slice(at + 1).map((l) => l.replace(/^[\s\-*•\d.)]+/, "").trim()).filter(Boolean),
+      stance: stance && stance.toLowerCase(),
+    };
+  }
+
+  function finished(seat, agent, turn) {
+    const said = turn.items.filter((i) => i.kind === "message" && i.author === "agent" && i.text);
+    if (!said.length) { seat.err = (agent.error && agent.error.message) || "Its turn ended with no answer."; return; }
+    const final = said[said.length - 1];
+    const did = turn.items.filter((i) => (i.kind === "thought" || i.kind === "tool") && (i.text || i.tool))
+      .slice(-6).map((i) => { const t = (i.text || "").slice(0, 220); return i.kind === "tool" ? `${(i.tool && i.tool.name) || "A tool"}${t ? ": " + t : ""}` : t; });
+    seat.last = { ...parse(final.text), did, cut: final.truncated, round: session.round };
+  }
+
+  // Each seat moves on its own: it gets its message once it can take one, and its answer once the turn has ended.
+  function advance(seat) {
+    const agent = agentOf(seat.id);
+    if (!agent) {
+      if ((seat.sendMe || seat.busy) && Date.now() - seat.at > 30000) { seat.sendMe = null; seat.busy = false; seat.err = "This agent has gone, or is hidden from this space."; return true; }
+      return false;
+    }
+    const thread = threadOf(agent);
+    const ended = agent.alive === false || ["error", "interrupted", "done"].includes(agent.state);
+    if (seat.sendMe) {
+      if (agent.can.send) {
+        const text = seat.sendMe;
+        seat.sendMe = null; seat.busy = true; seat.before = thread ? thread.turns.map((t) => t.id) : [];
+        something.send(agent.id, text).catch((error) => { seat.busy = false; seat.err = error.message; remember(); draw(); });
+        return true;
+      }
+      if (ended) { seat.sendMe = null; seat.err = agent.because.send || (agent.error && agent.error.message) || "This agent has ended."; return true; }
+      return false;
+    }
+    if (!seat.busy) return false;
+    const turn = thread && thread.turns.find((t) => !seat.before.includes(t.id));
+    if (turn && (["done", "error", "interrupted"].includes(turn.state) || (turn.state === "unknown" && agent.state === "idle"))) {
+      seat.busy = false; finished(seat, agent, turn); return true;
+    }
+    if (!turn && ended) { seat.busy = false; seat.err = (agent.error && agent.error.message) || "This agent ended before it answered."; return true; }
+    return false;
+  }
+
+  function step() {
+    if (!session) return;
+    const moved = [...session.seats, session.syn].filter(Boolean).map(advance).some(Boolean);
+    if (moved) remember();
+  }
+
+  // --- Agreements, by the words sentences share ------------------------------------------------------------------
+
+  const STOP = new Set(("the a an and or but of to in on at for with from by is are was were be been it its this that these those as if then than so do does did has have had you your we our they their them can will would should could may might must not no " +
+    "the and for les des une pour dans que qui sur avec est sont plus mais par ces cette vous nous ils elle aux ses leur").split(" "));
+  const NEGATION = /\b(no|not|never|cannot|avoid|against|without|drop|non|pas|jamais|sans)\b|n['’]t\b/i;
+  const sentences = (text) => text.split(/(?<=[.!?…])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+  function wordsOf(sentence) {
+    const raw = sentence.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").match(/[\p{L}\p{N}]{3,}/gu) || [];
+    const words = new Set(raw.filter((w) => !STOP.has(w)).map((w) => w.length > 4 ? w.replace(/(ing|ed|er|es|s)$/, "") : w));
+    if (/^\s*(no|non)\b/i.test(sentence)) words.add("yes"); // A leading no answers the same thing as a leading yes.
+    return words;
+  }
+  function relation(a, b) {
+    const shared = [...a.words].filter((w) => b.words.has(w)).length;
+    const least = Math.min(a.words.size, b.words.size);
+    if (!shared) return null;
+    const alike = shared >= least || (shared >= 2 && shared / least >= .5);
+    if (!alike) return shared >= 2 ? "near" : null;
+    return a.against === b.against ? "same" : "opposed";
+  }
+  function compare(seats) {
+    const parts = seats.map((s) => sentences(s.last.text).map((text) => ({ text, words: wordsOf(text), against: NEGATION.test(text), mark: null })));
+    parts.forEach((own, i) => own.forEach((part) => {
+      const seen = parts.filter((_, j) => j !== i).map((other) => {
+        const found = other.map((o) => relation(part, o));
+        return found.includes("opposed") ? "opposed" : found.includes("same") ? "same" : found.includes("near") ? "near" : null;
+      });
+      if (seen.every((r) => r === "same")) part.mark = "y";
+      else if (seen.some(Boolean)) part.mark = "n";
+    }));
+    const count = (mark) => parts.map((own) => own.filter((p) => p.mark === mark).length);
+    return { parts, agree: Math.min(...count("y")), differ: Math.max(...count("n")) };
+  }
+
+  // --- Drawing -------------------------------------------------------------------------------------------------
+
+  const waitsFor = (seat) => state && (state.requests.some((r) => r.agent === seat.id) || (agentOf(seat.id) || {}).state === "waiting");
+  const allIn = () => !!session && !launching && session.seats.every((s) => !s.sendMe && !s.busy);
+  const heard = () => session.seats.filter((s) => s.last && !s.err);
+
+  // What keeps the council from sitting, in the person's own words; null when it can.
+  function blocked() {
+    if (!state) return null;
+    if (!hasAny("send")) return "This space may not talk to your agents. You can change that in the panel beside it.";
+    const ready = kindsReady();
+    if (ready.length >= 2) return null;
+    if (!hasAny("launch")) return "This space may not start your agents. You can change that in the panel beside it.";
+    if (!ready.length) return "No agent that something can start was found on this Mac. Install Claude Code, Codex, OpenCode or pi to sit a council.";
+    return `Only ${label(ready[0])} can sit here, and a council needs two families. Install another agent, or let this space start the others in the panel beside it.`;
+  }
+
+  function drawColumn(col, view, marks) {
+    col.className = "cn-col" + (view.soon ? " soon" : "");
+    col.style.setProperty("--k", COLORS[view.kind] || "#9A917E");
+    const key = JSON.stringify([view.text, view.tone, marks]);
+    if (col.dataset.who !== label(view.kind)) col.querySelector(".cn-who span").textContent = col.dataset.who = label(view.kind);
+    col.querySelector(".cn-who small").textContent = view.word;
+    col.querySelector(".cn-changed").hidden = !view.changed;
+    col.querySelector(".cn-why").hidden = !view.why;
+    if (col.dataset.key === key) return;
+    col.dataset.key = key;
+    const old = col.querySelector(".cn-txt");
+    const text = element("p", { className: "cn-txt " + (view.tone || "") });
+    if (marks) marks.forEach((part, n) => {
+      if (n) text.append(" ");
+      text.append(part.mark ? element("mark", { className: part.mark, textContent: part.text }) : part.text);
+    });
+    else text.textContent = view.text;
+    old.replaceWith(text);
+  }
+
+  function makeColumn(i) {
+    const col = element("article");
+    const who = element("div", { className: "cn-who" });
+    who.append(element("span"), element("small"));
+    const end = element("div", { className: "cn-end" });
+    const why = element("button", { className: "cn-why", type: "button", textContent: "Why ›" });
+    why.addEventListener("click", (event) => { event.stopPropagation(); if (opener === why) closeLayer(); else openWhy(i, why); });
+    end.append(why, element("span", { className: "cn-changed", textContent: "Changed its stance", hidden: true }));
+    col.append(who, element("p", { className: "cn-txt" }), end);
+    return col;
+  }
+
+  function viewOf(seat) {
+    const waiting = waitsFor(seat);
+    const working = seat.sendMe || seat.busy;
+    const word = waiting ? "Waits for you" : seat.sendMe ? "Starting…" : working ? "Thinking…" : seat.err ? "No answer" : seat.last ? `Round ${seat.last.round}` : "Ready";
+    const base = { kind: seat.kind, word, why: !!seat.last, changed: !!seat.last && seat.last.round === 2 && seat.last.stance === "changed" && !seat.err };
+    if (seat.err) return { ...base, text: seat.err, tone: "bad" };
+    if (seat.last) return { ...base, text: seat.last.text + (seat.last.cut ? " (cut here by something)" : "") };
+    if (waiting) return { ...base, text: "Answer in something's window.", tone: "quiet" };
+    return { ...base, text: working ? "Its answer will appear here." : "Waiting for the others to be seated.", tone: "quiet" };
+  }
+
+  function draw() {
+    const ready = state ? kindsReady() : [];
+    const stop = session ? null : blocked();
+    const views = session ? session.seats.map(viewOf)
+      : ready.slice(0, 3).map((kind) => ({ kind, word: "", soon: true, text: "Will answer when you ask." }));
+
+    const cols = $("cols");
+    cols.style.setProperty("--n", Math.max(views.length, 1));
+    while (cols.children.length > views.length) cols.lastChild.remove();
+    while (cols.children.length < views.length) cols.append(makeColumn(cols.children.length));
+
+    const done = allIn();
+    const voices = session && done ? heard() : [];
+    const result = voices.length >= 2 ? compare(voices) : null;
+    views.forEach((view, i) => {
+      const at = result ? voices.indexOf(session.seats[i]) : -1;
+      drawColumn(cols.children[i], view, at >= 0 ? result.parts[at] : null);
+    });
+
+    $("ask").hidden = !!session;
+    $("question").hidden = !session;
+    if (session) $("question").textContent = session.q;
+    $("round").textContent = session ? session.round : 1;
+    $("points").textContent = result ? `${result.agree} agree · ${result.differ} differ${result.differ === 1 ? "s" : ""}` : "none yet";
+    $("bar").style.transform = `scaleX(${result && result.agree + result.differ ? result.agree / (result.agree + result.differ) : 0})`;
+    $("legend").hidden = !result;
+    $("legend-y").textContent = voices.length === 3 ? "All three agree" : "Both agree";
+
+    const main = $("main");
+    main.textContent = session ? "Second round" : "Ask the council";
+    main.hidden = !session && !!stop;
+    main.disabled = session ? !(done && session.round === 1 && voices.length >= 2) : !$("ask").value.trim() || launching;
+    $("ask").disabled = !!stop;
+    $("syn").hidden = !(result && (session.syn || ready.length > 0 || hasAny("launch")));
+    const writing = session && session.syn && (session.syn.sendMe || session.syn.busy);
+    $("syn").textContent = writing ? "The fourth is writing…" : "Ask a fourth for a synthesis";
+    $("fresh").hidden = !(session && done);
+
+    $("status").textContent = statusLine(done, voices);
+    if (stop) say({ message: stop }); else if ($("note").dataset.mine) say(null);
+    $("note").dataset.mine = stop ? "1" : "";
+    if (opener === $("syn")) fillSynthesis();
+  }
+
+  function statusLine(done, voices) {
+    if (!session) return "You decide. something does not.";
+    const waiting = session.seats.filter(waitsFor).map((s) => label(s.kind));
+    if (waiting.length) return `${list(waiting)} waits for you: answer in something's window.`;
+    if (launching) return "Taking their seats…";
+    if (!done) {
+      const left = session.seats.filter((s) => s.sendMe || s.busy).length;
+      return `Waiting for ${left} answer${left === 1 ? "" : "s"}…`;
+    }
+    if (voices.length < 2) return "Too few answers to compare. Try a new question.";
+    if (session.round === 1) return "The next round starts when you press it.";
+    const moved = session.seats.filter((s) => s.last && s.last.stance === "changed").map((s) => label(s.kind));
+    return moved.length ? `${list(moved)} changed stance. You decide.` : "No one changed stance. You decide.";
+  }
+
+  // The chips that carry each answer to the other columns, as the second round leaves.
+  function carry(seats) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const home = $("root").getBoundingClientRect();
+    const columns = [...$("cols").children].map((c) => c.getBoundingClientRect());
+    const place = (chip, box, row) => { chip.style.transform = `translate(${box.left - home.left + 14}px, ${box.bottom - home.top - 62 + row * 22}px)`; };
+    seats.forEach((from, f) => seats.forEach((to, t) => {
+      if (from === to) return;
+      const chip = element("span", { className: "cn-chip", textContent: `${label(from.kind)}'s answer` });
+      chip.style.setProperty("--k", COLORS[from.kind]);
+      const row = t < f ? t : t - 1;
+      place(chip, columns[session.seats.indexOf(from)], row);
+      $("root").append(chip);
+      setTimeout(() => { chip.style.opacity = "1"; place(chip, columns[session.seats.indexOf(to)], row); }, 40);
+      setTimeout(() => { chip.style.opacity = "0"; }, 1400);
+      setTimeout(() => chip.remove(), 1800);
+    }));
+  }
+
+  // --- The rounds: each one starts here, from a press, never by itself -----------------------------------------------
+
+  async function ask() {
+    const q = $("ask").value.trim();
+    if (!q || session || launching || blocked()) return;
+    say(null);
+    launching = true;
+    session = { q, round: 1, seats: [], syn: null };
+    draw();
+    const refused = [];
+    for (const kind of kindsReady()) {
+      if (session.seats.length === 3) break;
+      try { session.seats.push(await take(kind)); }
+      catch (error) { refused.push(error); }
+      remember(); draw();
+    }
+    launching = false;
+    if (session.seats.length < 2) {
+      session = null;
+      say(refused[0] || { message: "Fewer than two agents could start." });
+      remember(); draw();
+      return;
+    }
+    if (refused.length) say(refused[0]);
+    $("ask").value = "";
+    session.seats.forEach((s) => { s.sendMe = firstRound(q); });
+    remember();
+    step(); draw();
+  }
+
+  function second() {
+    if (!allIn() || session.round !== 1) return;
+    const seats = heard();
+    if (seats.length < 2) return;
+    closeLayer();
+    carry(seats);
+    session.round = 2;
+    session.syn = null;
+    seats.forEach((s) => { s.sendMe = secondRound(session.q, seats.filter((o) => o !== s)); });
+    remember();
+    step(); draw();
+  }
+
+  async function askSynthesis() {
+    if (session.syn && !session.syn.err) { openSynthesis(); return; }
+    session.syn = null;
+    const taken = session.seats.map((s) => s.kind);
+    const kinds = kindsReady();
+    const first = kinds.find((k) => !taken.includes(k)) || kinds.find((k) => free(k) || canStart(k));
+    if (!first) { say({ message: "No fourth agent can start." }); return; }
+    const voices = heard();
+    const placeholder = { kind: first, id: null, sendMe: null, busy: true, before: [], err: null, last: null, at: Date.now() };
+    session.syn = placeholder;
+    openSynthesis();
+    try {
+      const seat = await take(first);
+      seat.sendMe = synthesis(session.q, voices);
+      if (session && session.syn === placeholder) session.syn = seat; else return;
+    } catch (error) {
+      placeholder.busy = false; placeholder.err = error.message;
+    }
+    remember();
+    step(); draw();
+  }
+
+  function newQuestion() {
+    closeLayer();
+    session = null;
+    remember();
+    draw();
+    $("ask").focus();
+  }
+
+  // --- Depth on demand: one small layer at a time, closed by Esc or a click outside ----------------------------------
+
+  function heading(kind, title, aside) {
+    const h = element("h4");
+    h.style.setProperty("--k", COLORS[kind] || "#9A917E");
+    h.append(element("i"), title, element("small", { textContent: aside }));
+    return h;
+  }
+  const bullets = (items, marks) => {
+    const ul = element("ul");
+    ul.append(...items.map((t, i) => element("li", { textContent: t, className: marks ? marks[i] : "" })));
+    return ul;
+  };
+
+  function openLayer(from, width, left, top) {
+    const layer = $("layer");
+    layer.style.width = width + "px";
+    layer.style.left = left + "px";
+    layer.style.top = top + "px";
+    layer.classList.add("on");
+    opener = from;
+    $("root").focus({ preventScroll: true });
+  }
+  function closeLayer() {
+    const back = opener;
+    $("layer").classList.remove("on");
+    opener = null;
+    if (back) back.focus({ preventScroll: true });
+  }
+
+  function openWhy(i, from) {
+    const seat = session.seats[i], last = seat.last;
+    if (!last) return;
+    const layer = $("layer");
+    layer.replaceChildren(heading(seat.kind, `${label(seat.kind)} · Its reasoning`, `round ${last.round}`));
+    if (last.why.length) layer.append(bullets(last.why));
+    else layer.append(element("p", { textContent: "It gave no reasoning with this answer." }));
+    if (last.did.length) layer.append(element("h5", { textContent: "What it looked at" }), bullets(last.did));
+    layer.append(element("p", { textContent: "From its own words, its thoughts and its tool calls in this turn." }));
+    const home = $("root").getBoundingClientRect(), box = from.closest("article").getBoundingClientRect();
+    const width = Math.min(340, home.width - 32);
+    openLayer(from, width, Math.max(16, Math.min(box.left - home.left, home.width - width - 16)), Math.max(16, box.top - home.top + 44));
+  }
+
+  function fillSynthesis() {
+    const syn = session && session.syn, layer = $("layer");
+    if (!syn) return closeLayer();
+    const parts = [heading(syn.kind, `Synthesis by ${label(syn.kind)}`, "asked by you")];
+    if (syn.err) parts.push(element("p", { textContent: syn.err }));
+    else if (!syn.last) parts.push(element("p", { textContent: waitsFor(syn) ? "It waits for you: answer in something's window." : "Writing…" }));
+    else {
+      const lines = syn.last.text.split("\n").map((l) => l.trim()).filter(Boolean);
+      const items = lines.map((l) => l.replace(/^\W*(AGREE|OPEN)\s*:\s*/i, ""));
+      const marks = lines.map((l) => /^\W*AGREE\s*:/i.test(l) ? "y" : /^\W*OPEN\s*:/i.test(l) ? "n" : "");
+      parts.push(bullets(items, marks), element("p", { textContent: "A summary, not a decision. You choose." }));
+    }
+    const key = JSON.stringify([syn.err, syn.last && syn.last.text, !syn.last && waitsFor(syn)]);
+    if (layer.dataset.syn !== key) { layer.dataset.syn = key; layer.replaceChildren(...parts); }
+  }
+  function openSynthesis() {
+    const home = $("root").getBoundingClientRect(), width = Math.min(420, home.width - 32);
+    $("layer").dataset.syn = "";
+    fillSynthesis();
+    openLayer($("syn"), width, Math.max(16, (home.width - width) / 2), Math.max(16, home.height * .22));
+    draw();
+  }
+
+  $("main").addEventListener("click", () => { session ? second() : ask(); });
+  $("syn").addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (opener === $("syn")) closeLayer(); else askSynthesis().catch(say);
+  });
+  $("fresh").addEventListener("click", newQuestion);
+  $("ask").addEventListener("input", () => { $("main").disabled = !$("ask").value.trim() || launching; });
+  $("ask").addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); ask(); }
+  });
+  $("root").addEventListener("click", (event) => { if (opener && !$("layer").contains(event.target)) closeLayer(); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && opener) closeLayer(); });
+
+  // --- Start ---------------------------------------------------------------------------------------------------
+
+  function seen(next) { state = next; step(); draw(); }
+  function refresh() { return something.state().then(seen, say); }
+
+  async function start() {
+    if (hasAny("store")) {
+      const kept = await something.store.get("council").catch(() => null);
+      if (kept) { session = kept.session; bench = kept.bench || []; }
+    }
+    await refresh();
+    something.on("change", seen);
+    something.on("granted", refresh);
+  }
+  start().catch(say);
+</script>
+</body>
+</html>

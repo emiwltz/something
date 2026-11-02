@@ -771,19 +771,19 @@ struct AcceptanceBuild {
         defer { stage.remove() }
         let (shell, library, gallery, host) = try Self.templates(stage)
         #expect(shell.window.title == "Templates" && shell.window.subtitle == "Start from one, then make it yours")
-        #expect(gallery.cards(library.templates).map(\.title) == ["My agents", "Project watch", "Daily brief", "Logbook", "Stack", "Pebble"])
-        #expect(library.templates.map(\.needs) == ["Sees and writes to your agents", "Sees, writes to and starts agents\u{00A0}· Remembers",
-                                                   "Sees your agents\u{00A0}· Remembers", "Sees your agents\u{00A0}· Remembers", "Remembers",
-                                                   "Sees your agents\u{00A0}· Remembers"])
-        gallery.hovered = "agents"
+        #expect(gallery.cards(library.templates).map(\.title) == ["One Line", "Decision Deck", "Council", "Living Answers", "Consent Ledger", "Prompt Town"])
+        #expect(library.templates.map(\.needs) == ["Sees, writes to and starts agents", "Sees, writes to and starts agents",
+                                                   "Sees, writes to and starts agents\u{00A0}· Remembers", "Sees, writes to and starts agents\u{00A0}· Remembers",
+                                                   "Sees your agents\u{00A0}· Remembers", "Sees, writes to and starts agents\u{00A0}· Remembers"])
+        gallery.hovered = "deck"
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d5" + suffix, root: stage.home.root)
             // VoiceOver reads the heading, the filters and one element per card, named by its template.
-            let cards = ["Templates", "Show", "My agents", "Project watch", "Daily brief", "Logbook", "Stack", "Pebble"]
+            let cards = ["Templates", "Show", "One Line", "Decision Deck", "Council", "Living Answers", "Consent Ledger", "Prompt Town"]
             #expect(await Self.read(host) { $0 == cards } == cards)
         }
         gallery.shown = .agents
-        #expect(gallery.cards(library.templates).map(\.id) == ["agents", "project"])
+        #expect(gallery.cards(library.templates).map(\.id) == ["one-line", "deck", "council"])
         gallery.shown = .all
         // The cards as drawn: their left edges make three columns, then two in the narrow window.
         let columns = { Set(gallery.drawn.values.map { $0.minX.rounded() }).count }
@@ -803,13 +803,13 @@ struct AcceptanceBuild {
         let stage = try Stage("build")
         defer { stage.remove() }
         let (shell, library, gallery, host) = try Self.templates(stage)
-        let agents = try #require(library.templates.first { $0.id == "agents" })
-        gallery.preview(agents)
-        #expect(shell.window.title == "My agents" && shell.window.subtitle == "Template preview")
+        let deck = try #require(library.templates.first { $0.id == "deck" })
+        gallery.preview(deck)
+        #expect(shell.window.title == "Decision Deck" && shell.window.subtitle == "Template preview")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d6" + suffix, root: stage.home.root)
             // The bar, then the picture; the cards are gone.
-            let bar = ["Template preview", "A picture of My agents"]
+            let bar = ["Template preview", "A picture of Decision Deck"]
             #expect(await Self.read(host) { $0 == bar } == bar)
         }
         let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shell.window.windowNumber,

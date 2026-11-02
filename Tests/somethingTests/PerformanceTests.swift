@@ -143,10 +143,10 @@ struct PerformanceTests {
         library.select(.templates)
         shell.show(nil, templates: true)
         let host = try #require(shell.center.subviews.first { $0 is NSHostingView<GalleryView> } as? NSHostingView<GalleryView>)
-        host.rootView.model.preview(try #require(library.templates.first { $0.id == "pet" }))
+        host.rootView.model.preview(try #require(library.templates.first { $0.id == "village" }))
         shell.window.layoutIfNeeded()
         await wait(1)
-        #expect(host.rootView.model.previewing?.id == "pet" && Self.views(of: WKWebView.self, in: shell.window).isEmpty)
+        #expect(host.rootView.model.previewing?.id == "village" && Self.views(of: WKWebView.self, in: shell.window).isEmpty)
     }
 
     /// Three assistants that answered, then idled past the Preferences' delay: asleep, none of their processes runs,

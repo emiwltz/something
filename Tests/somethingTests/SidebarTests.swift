@@ -177,7 +177,7 @@ import Testing
         library.trashing = { asked.append($0.id) }
         run("Move to Trash…", in: library.menu(for: try #require(library.entry("agents"))))
         #expect(asked == ["agents"], "Move to Trash… asks first")
-        #expect(Template.symbol(of: "agents-2") == "square.3.layers.3d" && Template.symbol(of: "oracle") == "doc")
+        #expect(Template.symbol(of: "deck-2") == "rectangle.stack" && Template.symbol(of: "oracle") == "doc")
         #expect(Library.label(try #require(library.entry("pet")), .sleep) == "Pebble, \(Sign.State.sleep.word)")
     }
 

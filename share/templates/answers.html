@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Living Answers</title>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "Living Answers",
+  "description": "Ask a question and an agent answers with a small tool you can use and pin.",
+  "agents": { "see": "all" },
+  "rights": ["state", "send", "launch", "store"]
+}
+</script>
+<style>
+  [hidden] { display: none !important; }
+  :root { color-scheme: light; --ui: -apple-system, system-ui, sans-serif; --ink: #15171C; --soft: #5C5E66; --blue: #2B47C9;
+          --line: rgba(18, 19, 22, .12); --bad: #B3362F; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: #F4F4F1; color: var(--ink); font: 13px/1.4 var(--ui); }
+  main { height: 100%; min-height: 400px; max-width: 760px; margin: 0 auto; padding: 18px 22px 22px; display: flex; flex-direction: column; gap: 10px; }
+
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  h1 { margin: 0; font: 700 18px/1 ui-serif, Georgia, serif; white-space: nowrap; }
+  #who { font-size: 11px; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  form { display: flex; gap: 6px; }
+  #question { flex: 1; min-width: 0; font: 13px/1.4 var(--ui); color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; caret-color: var(--blue); }
+  #question:focus { outline: 2px solid var(--blue); outline-offset: -1px; }
+  #ask { font: 600 12px/1 var(--ui); padding: 0 14px; min-width: 58px; border-radius: 10px; border: 0; background: var(--blue); color: #fff; cursor: pointer; }
+  #ask.stop { background: #E7E8EC; color: var(--ink); }
+  #ask:disabled { opacity: .45; cursor: default; }
+
+  #chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  #chips button { font: 500 11px/1 var(--ui); padding: 7px 9px; border-radius: 999px; border: 1px solid transparent; background: #E7E8EC; color: var(--ink); cursor: pointer; }
+  #chips button.on { background: var(--ink); color: #fff; }
+  #blocked { margin: 0; font-size: 12px; color: var(--soft); }
+
+  #out { flex: 1; min-height: 170px; display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  iframe { flex: 1; min-height: 0; width: 100%; border: 0; background: #fff; transition: opacity .25s ease, transform .25s ease; }
+  iframe.hide { opacity: 0; transform: translateY(6px); }
+  #foot { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 11px; color: #50525A; background: #FAFAF8; border-top: 1px solid rgba(18, 19, 22, .08); }
+  #said { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #said.bad { color: var(--bad); white-space: normal; }
+  #dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .small { font: 600 11px/1 var(--ui); padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(18, 19, 22, .18); background: #fff; color: var(--ink); cursor: pointer; }
+  #source { border-color: transparent; background: none; color: var(--soft); font-weight: 500; }
+
+  /* min-height and the right padding keep the Pin button and the last pins clear of something's sticker. */
+  #shelf { flex: none; min-height: 38px; padding-right: 60px; display: flex; gap: 6px; align-items: center; font-size: 11px; color: #7C7E84; overflow-x: auto; white-space: nowrap; }
+  #shelf button { flex: none; max-width: 170px; overflow: hidden; text-overflow: ellipsis; font: 400 11px/1.2 var(--ui); padding: 5px 9px; border-radius: 999px; background: #fff; border: 1px solid var(--line); color: var(--ink); cursor: pointer; }
+  #shelf button.on { border-color: var(--ink); }
+
+  dialog { width: min(460px, calc(100vw - 40px)); max-height: calc(100vh - 60px); padding: 18px 20px; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 12px 40px rgba(18, 19, 22, .18); }
+  dialog[open] { animation: rise .18s ease; }
+  dialog::backdrop { background: rgba(21, 23, 28, .28); }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+  dialog h2 { margin: 0 0 8px; font: 600 14px/1.25 var(--ui); }
+  dialog p { margin: 0 0 10px; font-size: 12.5px; color: var(--soft); }
+  #asked { margin: 0 0 10px; padding: 10px 12px; max-height: 40vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; background: #F4F4F1; border-radius: 8px; color: var(--ink); }
+  .buttons { display: flex; justify-content: flex-end; gap: 6px; }
+  #allow { background: var(--blue); border-color: var(--blue); color: #fff; }
+  #allow:disabled { opacity: .45; cursor: default; }
+  pre { margin: 0 0 10px; padding: 10px 12px; max-height: 34vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.45 ui-monospace, Menlo, monospace; background: #F4F4F1; border-radius: 8px; }
+  summary { font-size: 12px; color: var(--soft); cursor: pointer; margin-bottom: 8px; }
+
+  @media (prefers-reduced-motion: reduce) { iframe { transition: none; } #dot, dialog[open] { animation: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Living Answers</h1><span id="who"></span></header>
+  <form id="form">
+    <input id="question" maxlength="1000" autocomplete="off" aria-label="Your question" placeholder="Ask anything; the answer comes back as a tool">
+    <button id="ask" type="submit">Ask</button>
+  </form>
+  <div id="chips"></div>
+  <p id="blocked" hidden></p>
+  <section id="out">
+    <iframe id="frame" sandbox="allow-scripts" title="The tool that answers your question"></iframe>
+    <div id="foot">
+      <i id="dot" hidden></i>
+      <span id="said" role="status"></span>
+      <button id="source" class="small" type="button">Source</button>
+      <button id="pin" class="small" type="button">Pin</button>
+    </div>
+  </section>
+  <nav id="shelf" aria-label="Pinned tools"></nav>
+</main>
+
+<dialog id="followup" aria-labelledby="followup-title">
+  <h2 id="followup-title">This tool asks for a follow-up</h2>
+  <p>Nothing has been sent. If you agree, your agent gets exactly this:</p>
+  <div id="asked"></div>
+  <div class="buttons">
+    <button id="decline" class="small" type="button">Not now</button>
+    <button id="allow" class="small" type="button">Send</button>
+  </div>
+</dialog>
+
+<dialog id="details" aria-labelledby="details-title">
+  <h2 id="details-title"></h2>
+  <p id="details-about"></p>
+  <pre id="details-code"></pre>
+  <details><summary>The rule sent with each question</summary><pre id="details-rule"></pre></details>
+  <div class="buttons"><button id="close" class="small" type="button">Close</button></div>
+</dialog>
+
+<!-- The three examples are real tools too: they run in the same sealed frame as an agent's. Their numbers are invented. -->
+<template id="example-0">
+<style>
+h4{margin:0 0 8px;font-size:14px}.c{display:flex;gap:12px;align-items:center;font-size:11.5px;color:#3B3F4A;margin-bottom:6px}
+select{font:inherit;border:0;border-radius:6px;background:#F1F2F5;padding:4px}input{width:90px;accent-color:#2B47C9}
+.r{display:grid;grid-template-columns:92px 1fr 52px;gap:8px;align-items:center;font-size:12px;margin:7px 0}small{color:#6B6F7A}
+.b{height:11px;border-radius:6px;background:#E3E6EE;overflow:hidden}.b i{display:block;height:100%;border-radius:6px;background:#9AA6C8;transform-origin:left;transition:transform .45s cubic-bezier(.2,.8,.2,1)}
+.w .b i{background:#2B47C9}.w b{color:#2B47C9}
+</style>
+<h4>Three trips, leaving on a Friday</h4>
+<div class="c"><select id="d"><option value="0">Leave on Friday</option><option value="1">Leave on Saturday</option></select>
+<label for="n">Nights</label> <input id="n" type="range" min="1" max="7" value="3"> <span id="v"></span></div>
+<div id="l"></div>
+<script>
+const T=[["Lisbon","train",180,200,95],["Porto","plane",140,220,80],["Seville","car",150,145,90]];
+l.innerHTML=T.map(t=>`<div class="r"><span>${t[0]} <small>${t[1]}</small></span><div class="b"><i></i></div><b></b></div>`).join("");
+function u(){const N=+n.value,c=T.map(t=>t[2+ +d.value]+t[4]*N),m=Math.max(...c),w=Math.min(...c);v.textContent=N;
+document.querySelector("h4").textContent="Three trips, leaving on a "+(d.value=="0"?"Friday":"Saturday");
+[...l.children].forEach((r,i)=>{r.classList.toggle("w",c[i]==w);r.querySelector("i").style.transform=`scaleX(${c[i]/m})`;r.querySelector("b").textContent="€"+c[i]})}
+d.onchange=n.oninput=u;u();
+</script>
+</template>
+
+<template id="example-1">
+<style>
+h4{margin:0 0 8px;font-size:14px}label{display:flex;justify-content:space-between;align-items:center;max-width:300px;font-size:11.5px;color:#3B3F4A;margin-bottom:5px}
+input{width:110px;accent-color:#2B47C9}.m{position:relative;height:10px;border-radius:5px;background:linear-gradient(90deg,#D9534F,#E2B04A,#2E9E6A);margin:12px 0 8px;opacity:.9}
+.m i{position:absolute;top:-3px;left:-2px;width:4px;height:16px;border-radius:2px;background:#15171C;transition:transform .3s ease}p{margin:0;font-size:12.5px}
+</style>
+<h4>Refactor the cart code now?</h4>
+<label>How often it changes <input id="a" type="range" min="0" max="10" value="8"></label>
+<label>How much it hurts <input id="b" type="range" min="0" max="10" value="7"></label>
+<label>Days you can spare <input id="c" type="range" min="0" max="10" value="4"></label>
+<div class="m" id="m"><i id="i"></i></div>
+<p id="o"></p>
+<script>
+function u(){const s=(+a.value+ +b.value)/20*.7+Math.min(+c.value,5)/5*.3;i.style.transform=`translateX(${s*(m.clientWidth-4)}px)`;
+o.innerHTML=s>.65?"<b>Yes, this week.</b> It changes often and it hurts.":s>.4?"<b>Soon, in small steps.</b> Worth doing, not worth stopping for.":"<b>Not now.</b> It costs you less than the work would."}
+a.oninput=b.oninput=c.oninput=u;addEventListener("resize",u);u();
+</script>
+</template>
+
+<template id="example-2">
+<style>
+h4{margin:0 0 8px;font-size:14px}.c{display:flex;gap:6px;font-size:11.5px;color:#3B3F4A;margin-bottom:6px}.c label{padding:4px 8px;border-radius:6px;background:#F1F2F5}
+input{accent-color:#2B47C9;margin:0 4px 0 0;vertical-align:-1px}.g{display:flex;align-items:center;gap:7px;font-size:12px;padding:5px 0;border-top:1px solid #EEF0F3;transition:opacity .25s}
+.g i{width:8px;height:8px;border-radius:50%}.g small{margin-left:auto;color:#6B6F7A}.off{opacity:.3}
+</style>
+<h4>Which agent fits this task?</h4>
+<div class="c"><label><input id="s" type="checkbox" checked>Takes a message mid-turn</label><label><input id="p" type="checkbox" checked>Has a plan mode</label></div>
+<div id="l"></div>
+<script>
+const A=[["Claude Code","#D2693C",1,1],["Codex","#3A6FE0",1,0],["OpenCode","#7C5CFA",0,1],["pi","#1E9C6A",1,0]];
+function u(){l.innerHTML=A.map(x=>{const f=(!s.checked||x[2])&&(!p.checked||x[3]);return `<div class="g ${f?"":"off"}"><i style="background:${x[1]}"></i>${x[0]}<small>${f?"fits":"no"}</small></div>`}).join("")}
+s.onchange=p.onchange=u;u();
+</script>
+</template>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const element = (tag, properties) => Object.assign(document.createElement(tag), properties);
+  const has = (right, kind) => something.granted.rights.some((r) => r === right || r === right + ":" + kind);
+  const AGENT = "Claude Code";
+
+  const RULE = `Answer with one small HTML tool instead of prose, one the person can use: a comparison to sort, sliders, a checklist, a chart.
+- First write one plain sentence with the short answer.
+- Then write the tool between <answer> and </answer>, starting with <title>a name of two or three words</title>.
+- Your whole reply must stay under 4,000 characters, or it is cut off and lost.
+- The tool is inline HTML, CSS and JavaScript only. It has no network, no external files and no storage. Do not use a code fence.
+- Style: white background, ink #15171C, accent #2B47C9, system font, 12 to 14px text, no outer margin; it shows in a small panel about 600 by 230 pixels.
+- Do not run commands or edit files. If you do not know a number, make it an editable input with a clear assumption.
+- Only if the tool needs you again, it may call parent.postMessage({followUp: "the text to send you"}, "*") from a button. The person sees that text and decides.`;
+
+  const SEAL = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:; form-action 'none'"><style>body{margin:0;padding:14px 16px;font:13px/1.4 -apple-system,system-ui,sans-serif;color:#15171C;background:#fff}</style>`;
+
+  const EXAMPLES = [
+    { chip: "Cheapest trip?", name: "Trip costs", question: "Which of my three trips is cheapest on a Friday?", said: "Porto is cheapest on a Friday; on a Saturday, Seville wins." },
+    { chip: "Refactor now?", name: "Refactor check", question: "Should I refactor the cart code now?", said: "Move the sliders: the verdict follows." },
+    { chip: "Which agent?", name: "Agent finder", question: "Which agent fits this task?", said: "From something's guide: what each agent can do." },
+  ].map((example, i) => ({ ...example, id: "example-" + i, example: i, by: null, html: $("example-" + i).innerHTML.trim() }));
+
+  let state = null;       // the latest state, null until read or outside something
+  let unreachable = null; // why the state cannot be read
+  let own = null;         // the id of the agent this space launched; it never writes to another
+  let pending = null;     // the question on its way: {marker, question, agent, sent, at}
+  let ticking = null;
+  let shown = null;       // the tool in the frame
+  let failure = null;     // what went wrong with the last question
+  let pins = [];
+  let declined = 0;       // follow-ups refused for the tool on screen
+
+  const seen = (id) => state && state.agents.find((a) => a.id === id) || null;
+  const keep = (path, value) => {
+    if (has("store")) something.store.set(path, value).catch((error) => { failure = error.message; render(); });
+  };
+
+  // The agent to write to, if this space's own is still there and may take a message.
+  function usable() {
+    const agent = seen(own);
+    return agent && agent.can.send && has("send", agent.kind) ? agent : null;
+  }
+
+  // Why no question can be asked now, in one sentence; null when one can.
+  function blocked() {
+    if (unreachable) return unreachable;
+    if (usable()) return null;
+    if (!has("send", "claude")) return "This space may not talk to your agents, so it cannot ask. You can change that beside it (⌘I); the tools here still work.";
+    if (!has("launch", "claude")) return "This space may not start an agent, so it cannot ask. You can change that beside it (⌘I); the tools here still work.";
+    const kind = state && state.kinds.claude;
+    if (kind && kind.installed === false) return `${AGENT} is not on this Mac, so nothing can answer yet. The tools here still work.`;
+    if (kind && !kind.launch) return kind.note || `${AGENT} cannot be started here. The tools here still work.`;
+    return null;
+  }
+
+  function render() {
+    const reason = blocked();
+    $("blocked").hidden = !reason;
+    $("blocked").textContent = reason || "";
+    const stoppable = pending && pending.sent;
+    $("ask").textContent = pending ? "Stop" : "Ask";
+    $("ask").classList.toggle("stop", !!pending);
+    $("ask").disabled = pending ? !stoppable : !!reason;
+    $("allow").disabled = !!pending || !!reason;
+    if (!shown) return;
+
+    $("who").textContent = shown.example !== undefined ? "Example · invented numbers" : "Answered by " + shown.by;
+    [...$("chips").children].forEach((chip, i) => chip.classList.toggle("on", shown.example === i));
+    $("dot").hidden = !pending;
+    $("said").textContent = pending ? progress() : failure || shown.said;
+    $("said").classList.toggle("bad", !pending && !!failure);
+    $("said").title = $("said").textContent;
+    const pinned = pins.some((p) => p.id === shown.id);
+    $("pin").textContent = pinned ? "Unpin" : "Pin";
+    $("pin").hidden = !has("store") || !!shown.words;
+
+    $("shelf").hidden = !has("store");
+    $("shelf").replaceChildren("Pinned:", ...(pins.length ? pins.map((pin) => {
+      const open = element("button", { type: "button", textContent: pin.name, title: pin.question, className: pin.id === shown.id ? "on" : "" });
+      open.onclick = () => show(pin);
+      return open;
+    }) : [" pin a tool and it stays here"]));
+  }
+
+  function progress() {
+    if (state && state.requests.some((r) => r.agent === pending.agent)) return `${AGENT} waits for you: answer in something's window.`;
+    if (!pending.sent) return `Starting ${AGENT}…`;
+    const seconds = Math.max(0, Math.round((Date.now() - pending.at) / 1000));
+    return `${AGENT} is making your tool · ${seconds} s`;
+  }
+
+  function show(tool) {
+    shown = tool;
+    failure = null;
+    declined = 0;
+    if ($("followup").open) $("followup").close();
+    $("frame").classList.add("hide");
+    $("frame").srcdoc = SEAL + tool.html;
+    render();
+  }
+  $("frame").onload = () => $("frame").classList.remove("hide");
+
+  const pause = (ms) => new Promise((done) => setTimeout(done, ms));
+
+  // A new agent is not listed at once: wait until it can take a message.
+  async function ready(id) {
+    for (let i = 0; i < 100; i++) {
+      state = await something.state();
+      if (usable()) return;
+      const agent = seen(id);
+      if (agent && agent.error) throw new Error(agent.error.message);
+      await pause(300);
+    }
+  }
+
+  async function ask(question) {
+    if (pending || blocked() || !question) return;
+    failure = null;
+    pending = { marker: Math.random().toString(36).slice(2, 10), question, agent: null, sent: false, at: Date.now() };
+    tick();
+    try {
+      if (!usable()) {
+        own = await something.launch("claude");
+        keep("agent", own);
+        await ready(own);
+      }
+      pending.agent = own;
+      await something.send(own, `[answers ${pending.marker}]\n${RULE}\n\nQuestion: ${question}`);
+      pending.sent = true;
+      keep("pending", pending);
+      render();
+    } catch (error) {
+      finish(error.message);
+    }
+  }
+
+  function tick() {
+    if (!ticking) ticking = setInterval(() => something.state().then(receive, () => {}), 1000);
+    render();
+  }
+
+  function finish(trouble, tool) {
+    pending = null;
+    clearInterval(ticking);
+    ticking = null;
+    keep("pending", null);
+    if (tool) { show(tool); keep("last", tool); }
+    failure = trouble || null;
+    render();
+  }
+
+  // Each question carries a marker, so its turn is found whatever else the agent did.
+  function look() {
+    if (!pending || !pending.sent) return;
+    const agent = seen(pending.agent);
+    const age = Date.now() - pending.at;
+    const mark = `[answers ${pending.marker}]`;
+    const thread = state.threads.find((t) => t.agent === pending.agent);
+    const turn = thread && thread.turns.find((t) => t.items.some((i) => i.kind === "message" && i.author === "person" && i.text.includes(mark)));
+    if (turn) {
+      const over = ["done", "error", "interrupted"].includes(turn.state)
+        || (turn.state === "unknown" && agent && !["working", "waiting"].includes(agent.state));
+      if (over) read(turn, agent);
+      return;
+    }
+    if (!agent ? age > 20000 : (agent.alive === false || ["done", "error"].includes(agent.state) || (agent.state === "idle" && !agent.queue.length && age > 30000))) {
+      finish(agent && agent.error ? agent.error.message : `${AGENT} stopped before it answered. Ask again to start a new one.`);
+    }
+  }
+
+  function read(turn, agent) {
+    const said = turn.items.filter((i) => i.kind === "message" && i.author === "agent");
+    const item = [...said].reverse().find((i) => i.text.includes("<answer>")) || said[said.length - 1];
+    if (!item) return finish(agent && agent.error ? agent.error.message : `${AGENT} ended its turn without a reply. Ask again.`);
+
+    const base = { id: pending.marker, question: pending.question, at: new Date(pending.at).toISOString(), by: byline(agent) };
+    const text = item.text;
+    const start = text.indexOf("<answer>"), end = text.lastIndexOf("</answer>");
+    if (start < 0) {
+      const safe = text.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+      return finish(null, { ...base, name: base.question, words: true, said: `${AGENT} answered in words, so there is no tool to pin.`, html: `<div style="white-space:pre-wrap">${safe}</div>` });
+    }
+    if (end < start) return finish(`The tool came back cut off at the 4,000-character limit. Ask again for a smaller one.`);
+    const html = text.slice(start + 8, end).trim().replace(/^```\w*\n?/, "").replace(/```$/, "");
+    const title = /<title>([^<]*)<\/title>/i.exec(html);
+    const line = (text.slice(0, start) + " " + text.slice(end + 9)).replace(/\s+/g, " ").trim();
+    finish(null, { ...base, name: title ? title[1].trim() : base.question.split(/\s+/).slice(0, 3).join(" "), said: line || "Here is your tool.", html });
+  }
+
+  function byline(agent) {
+    const folder = agent && agent.folder ? agent.folder.split("/").filter(Boolean).pop() : null;
+    return folder ? `${AGENT} · ${folder}` : AGENT;
+  }
+
+  function receive(next) {
+    state = next;
+    unreachable = null;
+    look();
+    render();
+  }
+
+  // Controls.
+  $("form").onsubmit = (event) => {
+    event.preventDefault();
+    if (!pending) return ask($("question").value.trim());
+    if (!pending.sent) return;
+    const id = pending.agent;
+    const agent = seen(id);
+    finish("Stopped.");
+    if (agent && agent.can.interrupt) something.interrupt(id).catch((error) => { failure = error.message; render(); });
+  };
+
+  $("chips").append(...EXAMPLES.map((example) => {
+    const chip = element("button", { type: "button", textContent: example.chip });
+    chip.onclick = () => { $("question").value = example.question; show(example); };
+    return chip;
+  }));
+
+  $("pin").onclick = () => {
+    pins = pins.some((p) => p.id === shown.id) ? pins.filter((p) => p.id !== shown.id) : [...pins, shown];
+    keep("pins", pins);
+    render();
+  };
+
+  // A tool can only ask: postMessage from its own frame opens this layer, and only "Send" writes to the agent.
+  window.addEventListener("message", (event) => {
+    if (event.source !== $("frame").contentWindow || !event.data || typeof event.data.followUp !== "string") return;
+    const text = event.data.followUp.trim().slice(0, 500);
+    if (!text || declined >= 3 || $("followup").open || $("details").open) return;
+    $("asked").textContent = text;
+    render();
+    $("followup").showModal();
+    $("decline").focus();
+  });
+  $("decline").onclick = () => { declined++; $("followup").close(); };
+  $("allow").onclick = () => {
+    const text = $("asked").textContent;
+    $("followup").close();
+    $("question").value = text;
+    ask(text);
+  };
+
+  $("source").onclick = () => {
+    $("details-title").textContent = shown.name;
+    $("details-about").textContent = (shown.example !== undefined ? "An example, for the question: " : `Made by ${shown.by}, for the question: `)
+      + `“${shown.question}” It runs in a sealed frame: no network, and no way to reach something or your agents.`;
+    $("details-code").textContent = shown.html;
+    $("details-rule").textContent = RULE;
+    $("details").showModal();
+    $("close").focus();
+  };
+  $("close").onclick = () => $("details").close();
+
+  // Esc closes either layer by itself; so does a click beside it.
+  for (const layer of [$("followup"), $("details")]) {
+    layer.addEventListener("click", (event) => {
+      const box = layer.getBoundingClientRect();
+      if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) layer.close();
+    });
+  }
+
+  something.on("change", receive);
+  something.on("granted", () => something.state().then(receive, cannot));
+  function cannot(error) { unreachable = error.message; render(); }
+
+  async function start() {
+    show(EXAMPLES[0]);
+    $("question").value = EXAMPLES[0].question;
+    if (has("store")) {
+      try {
+        const memory = (await something.store.get("")) || {};
+        pins = memory.pins || [];
+        own = memory.agent || null;
+        if (memory.last) { show(memory.last); $("question").value = memory.last.question; }
+        if (memory.pending) { pending = memory.pending; tick(); }
+      } catch (error) {
+        failure = error.message;
+      }
+    }
+    await something.state().then(receive, cannot);
+  }
+  start();
+</script>
+</body>
+</html>
