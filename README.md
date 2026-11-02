@@ -4,8 +4,8 @@ something is a Mac app for **spaces**, pages of your own that you build with you
 for you, a morning paper of what your agents did, or a small game for your breaks. something shows them safely, and
 lets them see the coding agents on your Mac and talk to them.
 
-*This page describes `main`. The version in Homebrew is 0.2.0, which drives fewer agents (Claude Code, Codex,
-OpenCode, pi); `brew install --HEAD emiwltz/tap/something` builds `main` from source instead (a few minutes).*
+*This page describes `main`. The version in Homebrew is 0.3.0; `brew install --HEAD emiwltz/tap/something` builds
+`main` from source instead (a few minutes).*
 
 ## Install
 
@@ -260,7 +260,7 @@ the Homebrew formula and the tap's files are in [packaging/homebrew/](packaging/
 ## Where it has run
 
 The suite has run on macOS 27 with the Command Line Tools 27 alone (Swift 6.4); at each push GitHub runs it on macOS
-15 and on its latest macOS runner, and installs the formula there with Homebrew. The bottles of 0.2.0 are built and
+15 and on its latest macOS runner, and installs the formula there with Homebrew. The bottles of 0.3.0 are built and
 installed on macOS 26 and 15 (Apple silicon) and macOS 15 on Intel; the suite itself has not run on an Intel Mac.
 
 Known limits of 0.3.0: the formula installs on GitHub's macOS 15 and latest macOS runners, but the suite is green only
