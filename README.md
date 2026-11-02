@@ -4,12 +4,18 @@
 
 <p align="center"><strong>Your pages. Your agents. One Mac app.</strong></p>
 
-something is a Mac app for **spaces**, pages of your own that you build with your own coding agent, such as a board of who is waiting
-for you, a morning paper of what your agents did, or a small game for your breaks. something shows them safely, and
-lets them see the coding agents on your Mac and talk to them.
+<p align="center">Build small pages with your own coding agent, and let them see and talk to the agents on your Mac.</p>
 
-*This page describes `main`. The version in Homebrew is 0.3.0; `brew install --HEAD emiwltz/tap/something` builds
-`main` from source instead (a few minutes).*
+<p align="center"><a href="#install">Install</a> · <a href="#your-first-space-in-four-steps">First space</a> · <a href="#six-templates-to-start-from">Templates</a> · <a href="#what-you-can-do">What you can do</a> · <a href="#agents">Agents</a> · <a href="#the-promise">The promise</a> · <a href="share/guide.md">Guide</a></p>
+
+| | |
+|---|---|
+| **What you make** | **Spaces**: a board of who is waiting for you, a morning paper of what your agents did, a small game for your breaks |
+| **Who builds them** | Your own coding agent, with your own account |
+| **Where they live** | On your Mac, in `~/something/spaces`, yours to export |
+| **What they can reach** | No network. Only the agents you allow |
+| **Who decides** | You, in a window a space cannot touch |
+| **What it costs** | Free and open source (MIT) |
 
 ## Install
 
@@ -21,11 +27,31 @@ brew install emiwltz/tap/something
 something
 ```
 
+Your agent must be installed and signed in as you use it in Terminal: something uses your own account and settings.
+
+*This page describes `main`. The version in Homebrew is 0.3.0; `brew install --HEAD emiwltz/tap/something` builds
+`main` from source instead (a few minutes).*
+
 ## How it works
 
 <p align="center"><img src=".github/readme/how-it-works.svg" width="900" alt="You describe a page, your coding agent builds it, and something shows it locked off the network. The page reaches the agents on your Mac through something.js, and only you answer a permission, in a window of your Mac."></p>
 
+## Your first space in four steps
+
+<table>
+<tr>
+<td width="50%"><img src=".github/readme/step-1-welcome.png" alt="The first step of the welcome"><br><strong>1. Open something</strong><br>Type <code>something</code>. Five short steps explain it, and Esc skips them.</td>
+<td width="50%"><img src=".github/readme/step-2-describe.png" alt="New Space, with the question What do you want to make?"><br><strong>2. Describe a space</strong><br>Say it in your own words (⌘N), and choose what it may do with your agents.</td>
+</tr>
+<tr>
+<td width="50%"><img src=".github/readme/step-3-build.png" alt="A space being built, with its ring in the sidebar"><br><strong>3. Let your assistant build it</strong><br>Press Build Now (⌘↵). You can leave: it appears in the sidebar and opens when ready.</td>
+<td width="50%"><img src=".github/readme/step-4-change.png" alt="The assistant card, after a change"><br><strong>4. Ask for a change</strong><br>Click the sticker (⌘K) and say what to change. The page reloads by itself.</td>
+</tr>
+</table>
+
 ## Six templates to start from
+
+Press ⇧⌘T. Each one is a finished space, and needs no agent to open.
 
 <table>
 <tr>
@@ -40,85 +66,29 @@ something
 </tr>
 </table>
 
-Read on: [the first minutes](#the-first-minutes), [the promise](#the-promise), [permissions](#permissions), and the
-[guide](share/guide.md) for what a space can do.
+## What you can do
 
-## The first minutes
+| I want to… | Do this |
+|---|---|
+| Go anywhere, or ask anything | ⌘P |
+| Make a new space | ⌘N |
+| Start from a template | ⇧⌘T |
+| Ask for a change | Click the sticker, or ⌘K |
+| See the conversation | ⌘J |
+| Stop the assistant | ⌘. |
+| Change one part of the page | Point at it (⌥⌘S), say what, press Return |
+| Leave several comments at once | Point, Add Comment (⌘↵), then Send to Assistant |
+| Undo or redo a change | ⌘Z, ⇧⌘Z |
+| Go back to an earlier version | History, in the panel |
+| See your agents and what the page sees | ⌘I |
+| Export a space as one HTML file | ⇧⌘E |
+| See every shortcut | ⌘/ |
 
-`something` opens alone on your desktop, with five short steps, each one sentence and one drawing: pages of your own,
-what an agent is and where it lives, the one that builds and the ones you show, who answers, and your first space. Esc
-skips them. The coding program found on your Mac is already chosen for your assistant; change it and its model on
-the third step. Make My First Space opens New Space, and Open an Example opens My agents. Choosing another program
-may start it, without a message, to read its models. Notifications (Settings › Permissions) stay off until you turn
-them on. Help › Welcome shows the welcome
-again, and Help › How something Works the picture, one part at a time if you like.
+## What a space may do
 
-The welcome ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space (a suggestion fills
-the field with an example). Under the field one sentence says what it may do with your agents, "This space may [watch]
-[all your agents].", pre-set from your words, else from Settings › Permissions, "not see" at first; each bracketed word opens
-a menu that explains its choices. Build Now, Continue or ⌘↵ starts it: your assistant builds it, decides what you left
-open and says so, and the space opens by itself when ready if you are following that build, with nothing more to
-allow. The space appears in the sidebar
-at once, with a ring that fills as it builds; you may leave New Space meanwhile, or build several at a time: nothing
-stops them, and a click on the row shows the build again. A space that finishes while you are elsewhere says "… is ready
-· Open" (and a notification of the Mac too while something is in the background, if you turned notifications on). Its
-assistant is asked to answer in two sentences, what is ready and one thing to try; the card then shows your words, one
-line of what was made and checked, and that answer; the steps and anything longer are folded under Details. A build that
-fails, or that you stop, keeps your words and their level on New Space to try again. Each space's assistant rests over
-it as a small sticker in a corner, whose eyes say what it does; drag it to the other side if it is in the way. Click it
-(or ⌘K) to ask for a change: the space reloads as your agent saves it. The first time, a small hint says so beside it;
-Info and Point each have one too, once, at a later opening. ⌘J shows the conversation, ⌘\ makes it small again, ⌘. stops
-the assistant. Its first two chips, "Claude Code" and "Sonnet 5.5 · High", change the program, model and effort of
-that space's conversation. The third, "Accepts Edits" or "Asks First" where offered, changes whether your assistants
-ask before building work, from their next conversation. Each model says in one line what it is, under the name the
-agent gives it, and for a program something has not run yet the chip says "Reading its models…" while something
-starts it, without a message, to read its list. "/" at the start of its field lists the agent's own commands as the agent lists them, from the first try (↑↓, Return
-sends one as you wrote it, Tab leaves it for its text; a command that needs text waits for it). Codex, pi and Amp give
-no list: "/" says so, and you can type a command yourself. something remembers each agent's list for the next time it
-is not running. Templates (⇧⌘T) are six finished spaces to start from, and need no agent. ⌘P goes or asks: type a space's
-name to go there, or a sentence for an assistant. The line "Goes to" says once where it goes (this space, a New Space
-built from it, or another space), Tab changes it, and nothing is sent before Return. ⌘/ lists the shortcuts.
+One sentence decides, and you can change it at any time: *"This space may [watch] [all your agents]."*
 
-**One assistant per space**: each space has its own conversation with your agent, so several can work at once, each on
-its own space. The sidebar lists your spaces by name, in groups you make; **Needs You**, at its top, lists the spaces
-whose agents wait for your answer (each stays in its group too). The page takes the whole window, under a glass header that holds only the sidebar button, the
-space's name (click it for Info), "Jump to a space or an action" (⌘P), with a yellow dot and a count while something
-waits, Point, your agents (their eyes and a count, ⌘I) and Page Full Screen (⇧⌘F: the page fills the window, the header
-comes back at its top edge, Esc leaves), and Full Access's orange mark while it is on; Reload is in the View menu (⌘R), and so is
-the interface size: ⌘+ and ⌘− grow or shrink the whole app, pages included, to Large or Larger, ⌘0 brings it back
-(also in Settings › General). The sidebar floats: rest the pointer on the window's left edge, or press ⌃⌘S, and it comes over the page, then leaves with the pointer. Its pin keeps it beside the page, and Settings › General says which you start with. On New Space and Templates it stays open. It is the same sidebar at every window size. **something stops
-idle assistants on its own** to save memory: one idle for 10 minutes falls asleep, and at most 3 stay awake (the open
-space's, and any that works or waits for you, are never put to sleep). Settings (⌘,) › Agents changes both: Put
-idle assistants to sleep after, and Keep at most; Put Idle Assistants to Sleep (Assistant menu) does it at once. A
-sleeping assistant wakes on your next message and picks its conversation up, unless Resume each space's conversation is
-off in the same tab, kept in `~/Library/Application Support/something/assistants/`: its agent, model, effort and last
-60 items. An agent that cannot resume a conversation (all but Claude Code for now) is never put to sleep on its own; put
-to sleep by you, it starts a new conversation, and says so.
-
-**Quick Change**: point at a part of a space (⌥⌘S), say what should change, and press Return. A temporary session of
-that space's assistant, the same agent with the same model and effort, makes the change while the space's own
-conversation stays as it was; a message you write to it meanwhile waits until the Quick Change ends. something stops
-the temporary session once its turn ends, never while one of its requests waits for you. Each Quick Change leaves a
-new conversation in your agent's own history, which something does not clean.
-
-**Comments**: while you point, Add Comment (⌘↵) keeps what you say about a part as a numbered pin instead. Point at
-other parts, comment on each, then Send to Assistant (⌘↵): they go together, in one message, to the space's own
-assistant, which works through them. A comment stays editable until it leaves, and comes back if that turn is stopped.
-
-A Quick Change that changes nothing leaves its answer as a note beside the part. After each change a short note names
-it, with Undo (⌘Z); Redo (⇧⌘Z) puts it back.
-
-A space's past is kept as **versions** in `~/Library/Application Support/something/versions/`, never in the spaces
-folder: after each change, its files, each content stored once, named by the sentence that asked for it, or "Edited
-outside something" when no turn of its assistant made it. History (the panel's third tab, or View › Show History…) lists them with
-a picture of each; hold one (or press Space) to see it over the page, let go to come back. Restore This Version is
-itself a version, undone by ⌘Z, and the files it did not have go to the Trash. 50 versions per space and 500 MB in all
-are kept by default; the oldest go first, never a space's latest, its files or its memory. A space heavier than 15 MB or
-500 files keeps no versions; restoring it sends the files it changes to the Trash. A space moved to the Trash takes its
-versions with it, the next space opens, and Undo in the toast brings it all back; a space deleted or renamed in Finder
-sends the versions left under its old name there too, so a new space of that name starts without them.
-
-Your agent must be installed and signed in as you use it in Terminal: something uses your own account and settings.
+<p align="center"><img src=".github/readme/rights.svg" width="900" alt="Four levels, each adding to the one before: not see, watch, talk to, start."></p>
 
 ## Agents
 
@@ -138,16 +108,32 @@ Every agent something drives is also a builder.
 | Cursor | by its process | no: Cursor would ask you before every small step of a build, so something shows it but doesn't build with it. | no |
 | Auggie (`auggie`), Crush (`crush`), DeepSeek Harness (`dsh`), Factory Droid (`droid`), Gemini CLI (`gemini`), GitHub Copilot CLI (`copilot`), Goose (`goose`), Qwen Code (`qwen`), ZCode (`zcode`) | by its process | no: something has no extension for them. | no |
 
+<details>
+<summary><strong>What agents cannot do</strong></summary>
+
 Amp keeps its conversations on its own servers, so an Amp you started yourself is seen by its process only. An agent
 started elsewhere is read-only; a Claude Code or Codex conversation can be continued in something once no other
 process holds it. What each driven agent cannot do (OpenCode and OMP cannot take a message during a turn, pi has no
 mode, Amp cannot be interrupted) is in [the guide](share/guide.md#what-each-kind-can-do-and-what-it-cannot).
+
+</details>
 
 ## The promise
 
 something answers for you only where you said so: one exact command you allowed Always for a space, and every
 permission your assistant asks while Full Access is on. Your assistant may change your spaces and run something’s own
 commands without asking; everything else it does asks you, as your agent’s own settings decide.
+
+| Who | What it may do without asking |
+|---|---|
+| Claude Code | Edits and writes in `~/something/spaces`, and something's three tools |
+| Codex | Its own sandbox in `~/something/spaces`, without the network, and those tools |
+| OpenCode, OMP | What their own settings say |
+| pi, Amp | They never ask, by design: they can run any command on your Mac, and say so |
+| Agents a space starts | Their own settings. They still ask you |
+
+<details>
+<summary><strong>The promise in full</strong></summary>
 
 Your assistant is the agent you chose, working in `~/something/spaces`. Each space has its own: its own conversation
 with that agent, started at its first message and shown when the space is open. New Space has one too, and the space it
@@ -170,7 +156,23 @@ assistant asks before every change), turns the exception off from the next conve
 to it. something writes `AGENTS.md` and `CLAUDE.md` in `~/something/spaces` to tell your assistant what something is;
 a copy whose first line you removed is yours and left alone.
 
+</details>
+
 ## Permissions
+
+| Decision | In one line |
+|---|---|
+| **Rights** | One sentence says what a space may do with your agents |
+| **Permissions** | Each request opens a panel: Allow Once or Deny |
+| **Always for this space** | Keeps one exact plain command, until you revoke it |
+| **Full Access** | Allows every permission your assistant asks, with an orange mark while it is on |
+| **Modes** | A mode that asks less asks you again; one that never asks is refused |
+| **Links** | Each link a space opens asks you first |
+| **Keys** | A page cannot keep something's shortcuts |
+| **Export** | An exported space carries its memory only if you choose so |
+
+<details>
+<summary><strong>Every decision in detail</strong></summary>
 
 Every decision is yours, in a window of the Mac that a space cannot draw, imitate or answer:
 
@@ -223,6 +225,22 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   takes that file, a folder, an .html file or an older `.something` file: something checks it first, locked off the
   network, says what it found, and brings it in as a copy.
 
+</details>
+
+## Your data
+
+| Question | Answer |
+|---|---|
+| Does the app connect to the Internet? | No. No port, no telemetry |
+| Can a space reach the network? | No: every other address is blocked four times |
+| Does something change my agents' settings? | No: no hook, no MCP server, no skill, no setting |
+| What does it read? | Each agent's own files, read-only |
+| Where does it write? | `~/something/` and `~/Library/Application Support/something/` |
+| What happens to what it removes? | It goes to the Trash |
+
+<details>
+<summary><strong>What it writes, exactly</strong></summary>
+
 something reads each agent's own files read-only, and takes only what a space is shown or what you open in the panel.
 It writes nothing into your agents' configuration: no hook, no MCP server, no skill, no setting. What a launch needs is passed on the command line
 or the agent's channel, for that launch only. It writes only in `~/something/` and
@@ -230,7 +248,10 @@ or the agent's channel, for that launch only. It writes only in `~/something/` a
 `something check` takes in `$TMPDIR/something-check`, and the one-use file Continue in Terminal hands to Terminal,
 in `$TMPDIR`; what it removes goes to the Trash.
 
-## No network for spaces
+</details>
+
+<details>
+<summary><strong>No network for spaces</strong></summary>
 
 A space loads only its own files, inline code, `data:` and `blob:`. Every other address is blocked four times: a
 sandboxed frame, a content security policy, a content rule list, and a navigation policy. The app opens no port,
@@ -242,29 +263,116 @@ shadow root written in HTML, WebKit may look up the link's server name and open 
 the window. No request is sent, but the page chooses the name, so it could put a few words in it. Every other link is
 stopped before any connection.
 
-## Building spaces
+</details>
+
+## The full tour
+
+<details>
+<summary><strong>The welcome</strong></summary>
+
+`something` opens alone on your desktop, with five short steps, each one sentence and one drawing: pages of your own,
+what an agent is and where it lives, the one that builds and the ones you show, who answers, and your first space. Esc
+skips them. The coding program found on your Mac is already chosen for your assistant; change it and its model on
+the third step. Make My First Space opens New Space, and Open an Example opens My agents. Choosing another program
+may start it, without a message, to read its models. Notifications (Settings › Permissions) stay off until you turn
+them on. Help › Welcome shows the welcome
+again, and Help › How something Works the picture, one part at a time if you like.
+
+</details>
+
+<details>
+<summary><strong>New Space and building</strong></summary>
+
+The welcome ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space (a suggestion fills
+the field with an example). Under the field one sentence says what it may do with your agents, "This space may [watch]
+[all your agents].", pre-set from your words, else from Settings › Permissions, "not see" at first; each bracketed word opens
+a menu that explains its choices. Build Now, Continue or ⌘↵ starts it: your assistant builds it, decides what you left
+open and says so, and the space opens by itself when ready if you are following that build, with nothing more to
+allow. The space appears in the sidebar
+at once, with a ring that fills as it builds; you may leave New Space meanwhile, or build several at a time: nothing
+stops them, and a click on the row shows the build again. A space that finishes while you are elsewhere says "… is ready
+· Open" (and a notification of the Mac too while something is in the background, if you turned notifications on). Its
+assistant is asked to answer in two sentences, what is ready and one thing to try; the card then shows your words, one
+line of what was made and checked, and that answer; the steps and anything longer are folded under Details. A build that
+fails, or that you stop, keeps your words and their level on New Space to try again. Each space's assistant rests over
+it as a small sticker in a corner, whose eyes say what it does; drag it to the other side if it is in the way. Click it
+(or ⌘K) to ask for a change: the space reloads as your agent saves it. The first time, a small hint says so beside it;
+Info and Point each have one too, once, at a later opening. ⌘J shows the conversation, ⌘\ makes it small again, ⌘. stops
+the assistant. Its first two chips, "Claude Code" and "Sonnet 5.5 · High", change the program, model and effort of
+that space's conversation. The third, "Accepts Edits" or "Asks First" where offered, changes whether your assistants
+ask before building work, from their next conversation. Each model says in one line what it is, under the name the
+agent gives it, and for a program something has not run yet the chip says "Reading its models…" while something
+starts it, without a message, to read its list. "/" at the start of its field lists the agent's own commands as the agent lists them, from the first try (↑↓, Return
+sends one as you wrote it, Tab leaves it for its text; a command that needs text waits for it). Codex, pi and Amp give
+no list: "/" says so, and you can type a command yourself. something remembers each agent's list for the next time it
+is not running. Templates (⇧⌘T) are six finished spaces to start from, and need no agent. ⌘P goes or asks: type a space's
+name to go there, or a sentence for an assistant. The line "Goes to" says once where it goes (this space, a New Space
+built from it, or another space), Tab changes it, and nothing is sent before Return. ⌘/ lists the shortcuts.
+
+</details>
+
+<details>
+<summary><strong>One assistant per space</strong></summary>
+
+**One assistant per space**: each space has its own conversation with your agent, so several can work at once, each on
+its own space. The sidebar lists your spaces by name, in groups you make; **Needs You**, at its top, lists the spaces
+whose agents wait for your answer (each stays in its group too). The page takes the whole window, under a glass header that holds only the sidebar button, the
+space's name (click it for Info), "Jump to a space or an action" (⌘P), with a yellow dot and a count while something
+waits, Point, your agents (their eyes and a count, ⌘I) and Page Full Screen (⇧⌘F: the page fills the window, the header
+comes back at its top edge, Esc leaves), and Full Access's orange mark while it is on; Reload is in the View menu (⌘R), and so is
+the interface size: ⌘+ and ⌘− grow or shrink the whole app, pages included, to Large or Larger, ⌘0 brings it back
+(also in Settings › General). The sidebar floats: rest the pointer on the window's left edge, or press ⌃⌘S, and it comes over the page, then leaves with the pointer. Its pin keeps it beside the page, and Settings › General says which you start with. On New Space and Templates it stays open. It is the same sidebar at every window size. **something stops
+idle assistants on its own** to save memory: one idle for 10 minutes falls asleep, and at most 3 stay awake (the open
+space's, and any that works or waits for you, are never put to sleep). Settings (⌘,) › Agents changes both: Put
+idle assistants to sleep after, and Keep at most; Put Idle Assistants to Sleep (Assistant menu) does it at once. A
+sleeping assistant wakes on your next message and picks its conversation up, unless Resume each space's conversation is
+off in the same tab, kept in `~/Library/Application Support/something/assistants/`: its agent, model, effort and last
+60 items. An agent that cannot resume a conversation (all but Claude Code for now) is never put to sleep on its own; put
+to sleep by you, it starts a new conversation, and says so.
+
+</details>
+
+<details>
+<summary><strong>Quick Change and comments</strong></summary>
+
+**Quick Change**: point at a part of a space (⌥⌘S), say what should change, and press Return. A temporary session of
+that space's assistant, the same agent with the same model and effort, makes the change while the space's own
+conversation stays as it was; a message you write to it meanwhile waits until the Quick Change ends. something stops
+the temporary session once its turn ends, never while one of its requests waits for you. Each Quick Change leaves a
+new conversation in your agent's own history, which something does not clean.
+
+**Comments**: while you point, Add Comment (⌘↵) keeps what you say about a part as a numbered pin instead. Point at
+other parts, comment on each, then Send to Assistant (⌘↵): they go together, in one message, to the space's own
+assistant, which works through them. A comment stays editable until it leaves, and comes back if that turn is stopped.
+
+A Quick Change that changes nothing leaves its answer as a note beside the part. After each change a short note names
+it, with Undo (⌘Z); Redo (⇧⌘Z) puts it back.
+
+</details>
+
+<details>
+<summary><strong>Versions</strong></summary>
+
+A space's past is kept as **versions** in `~/Library/Application Support/something/versions/`, never in the spaces
+folder: after each change, its files, each content stored once, named by the sentence that asked for it, or "Edited
+outside something" when no turn of its assistant made it. History (the panel's third tab, or View › Show History…) lists them with
+a picture of each; hold one (or press Space) to see it over the page, let go to come back. Restore This Version is
+itself a version, undone by ⌘Z, and the files it did not have go to the Trash. 50 versions per space and 500 MB in all
+are kept by default; the oldest go first, never a space's latest, its files or its memory. A space heavier than 15 MB or
+500 files keeps no versions; restoring it sends the files it changes to the Trash. A space moved to the Trash takes its
+versions with it, the next space opens, and Undo in the toast brings it all back; a space deleted or renamed in Finder
+sends the versions left under its old name there too, so a new space of that name starts without them.
+
+</details>
+
+## For developers
 
 The contract a space can rely on is [share/guide.md](share/guide.md), written for the coding agent that builds spaces
 (`something guide --print` prints it; `something --help` lists the commands). To build spaces with an agent outside
 something, give it the guide, or add [share/skill/SKILL.md](share/skill/SKILL.md) to your agent yourself.
 
-## Uninstall
-
-Quit something first (⌘Q): quitting stops the agents it launched.
-
-```sh
-brew uninstall something
-brew untap emiwltz/tap                               # if you installed nothing else from it
-rm -rf ~/Applications/something.app                  # the launcher an earlier version made, if you turned it on
-rm -rf ~/Library/Application\ Support/something      # your settings, your spaces' levels, journals, versions and assistants' conversations
-rm -rf ~/something                                   # your spaces, their memory, and the folders of agents started with No Folder: keep them if you may come back
-rm -rf "$TMPDIR/something-check"                     # the snapshots something check took of pages elsewhere
-```
-
-macOS and WebKit may also have made folders named after the app's identifier:
-`find ~/Library -maxdepth 2 -name 'io.github.emiwltz.something*'` lists them.
-
-## Building from the clone
+<details>
+<summary><strong>Building from the clone</strong></summary>
 
 The Command Line Tools are enough; Xcode is not needed.
 
@@ -283,17 +391,53 @@ launches keep your real home and their sign-in. Never run `swift run something` 
 both would launch agents and write the same journals. The rules for changing the code are in [AGENTS.md](AGENTS.md);
 the Homebrew formula and the tap's files are in [packaging/homebrew/](packaging/homebrew).
 
+</details>
+
 ## Where it has run
 
 The suite has run on macOS 27 with the Command Line Tools 27 alone (Swift 6.4); at each push GitHub runs it on macOS
 15 and on its latest macOS runner, and installs the formula there with Homebrew. The bottles of 0.3.0 are built and
 installed on macOS 26 and 15 (Apple silicon) and macOS 15 on Intel; the suite itself has not run on an Intel Mac.
 
+| Tried | Result |
+|---|---|
+| Suite on macOS 27 | Green |
+| Install on macOS 26, macOS 15, macOS 15 Intel | Green |
+| Suite on GitHub's macOS 15 and latest macOS | Red |
+| By hand on macOS 26 or 15 | Not yet |
+| On a fresh Mac | Not yet |
+
+<details>
+<summary><strong>Known limits of 0.3.0</strong></summary>
+
 Known limits of 0.3.0: the formula installs on GitHub's macOS 15 and latest macOS runners, but the suite is green only
 on the Mac above, and red on both runners. Most of what fails there are drawings, animations and exact layouts, which
 differ on those machines; none of it is proven to be a fault of the app. On macOS 15, three tests fail every time and
 are not explained yet: a new space may take time to appear in the sidebar, and an agent may be missing from Info's
 list. It has not been tried by hand on macOS 26 or 15, nor on a fresh Mac.
+
+</details>
+
+## Uninstall
+
+<details>
+<summary><strong>The commands</strong></summary>
+
+Quit something first (⌘Q): quitting stops the agents it launched.
+
+```sh
+brew uninstall something
+brew untap emiwltz/tap                               # if you installed nothing else from it
+rm -rf ~/Applications/something.app                  # the launcher an earlier version made, if you turned it on
+rm -rf ~/Library/Application\ Support/something      # your settings, your spaces' levels, journals, versions and assistants' conversations
+rm -rf ~/something                                   # your spaces, their memory, and the folders of agents started with No Folder: keep them if you may come back
+rm -rf "$TMPDIR/something-check"                     # the snapshots something check took of pages elsewhere
+```
+
+macOS and WebKit may also have made folders named after the app's identifier:
+`find ~/Library -maxdepth 2 -name 'io.github.emiwltz.something*'` lists them.
+
+</details>
 
 ## Security
 
