@@ -544,16 +544,17 @@ enum Picture {
         do {
             return try await withCheckedThrowingContinuation { done in
                 reader.async {
-                    done.resume(with: Result {
+                    done.resume(with: Result(catching: {
                         let read = VNRecognizeTextRequest()
                         read.recognitionLevel = .accurate
                         read.usesLanguageCorrection = false
                         try VNImageRequestHandler(cgImage: image).perform([read])
                         return (read.results ?? []).compactMap { line in line.topCandidates(1).first.map { ($0.string, place(line.boundingBox)) } }
-                    })
+                    }))
                 }
             }
         } catch where "\(error)".contains("e5rtError") {
+            #if compiler(>=6.2)
             guard #available(macOS 26, *) else { throw error }
             do {
                 let page = try await RecognizeDocumentsRequest().perform(on: image).first
@@ -565,6 +566,9 @@ enum Picture {
                 throw error
                 #endif
             }
+            #else
+            throw error
+            #endif
         }
     }
 

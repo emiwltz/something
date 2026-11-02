@@ -248,7 +248,7 @@ struct Offscreen {
 /// that takes seconds on a slow Mac (a 3-core runner) would make their deadlines pass while nothing could run.
 func offMain<T>(_ work: @escaping () throws -> T) async throws -> T {
     try await withCheckedThrowingContinuation { continuation in
-        Thread.detachNewThread { continuation.resume(with: Result { try work() }) }
+        Thread.detachNewThread { continuation.resume(with: Result(catching: { try work() })) }
     }
 }
 

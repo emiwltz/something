@@ -753,7 +753,9 @@ struct AcceptanceShow {
         #expect(tray.footer == ["3 comments", "Point at another part", "Esc", "Stop Pointing"] && tray.accessibilityLabel() == "Comments")
         #expect(tray.fields.map(\.stringValue) == AcceptanceShow.comments.map(\.2) && tray.fields.allSatisfy(\.isEditable))
         #expect(tray.frame.width == 640 && abs(tray.frame.midX - comments.bounds.width / 2) <= 0.5 && tray.frame.maxY == comments.bounds.height - 16)
-        #expect(tray.frame.height == 6 + 3 * 31 + 2 + 46 && comments.frame == brief.web.frame)
+        let trayHeight: Int = 6 + 3 * 31 + 2 + 46
+        #expect(tray.frame.height == CGFloat(trayHeight))
+        #expect(comments.frame == brief.web.frame)
         #expect(tray.sendButton.title == "Send to Assistant" && tray.sendButton.hint == "⌘↵" && tray.sendButton.primary && tray.clear.title == "Clear")
         func buttons(_ view: NSView) -> [NSButton] { [view as? NSButton].compactMap { $0 } + view.subviews.flatMap(buttons) }
         #expect(!buttons(tray).contains { $0.title.contains("Allow") }, "a comment never allows anything")
