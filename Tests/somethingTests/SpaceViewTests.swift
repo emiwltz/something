@@ -918,7 +918,9 @@ import WebKit
 
         let tiny = try #require(await Pointing.part(at: try await center(".tiny"), in: window.web, frame: frame))
         #expect(tiny.path == ":root > body:nth-of-type(1) > div:nth-of-type(1)" && tiny.tag == "div" && tiny.kind == "this block")
-        #expect(tiny.rect.size == CGSize(width: window.web.frame.width, height: 100))
+        // The page's own width: a Mac with no trackpad keeps a scroll bar beside it.
+        let wide = try #require(try await run(window, "return document.documentElement.clientWidth") as? Double)
+        #expect(tiny.rect.size == CGSize(width: wide, height: 100) && wide > window.web.frame.width - 20)
         let cell = try #require(await Pointing.part(at: try await center("td"), in: window.web, frame: frame))
         #expect(cell.path == ":root > body:nth-of-type(1) > table:nth-of-type(1) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1)")
         #expect(cell.kind == "this cell")
