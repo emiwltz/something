@@ -28,6 +28,10 @@ jobs:
       - name: Versions
         run: sw_vers && swift --version && node --version
       - run: swift build
+      - name: Scroll bars over the content, as with a trackpad
+        # A runner has no trackpad, so macOS keeps a scroll bar beside the content; the mockup's screens, which the
+        # acceptance scenarios hold, are drawn with the bar over it. The runner is thrown away.
+        run: defaults write -g AppleShowScrollBars WhenScrolling
       - name: swift test
         # A hung test must not hold the runner: GitHub stops the whole process tree after 20 minutes and says so.
         timeout-minutes: 20
